@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { color, PHASES, PHASE_LABELS } from '@forge/shared';
 import { Pill } from '@forge/shared/ui';
 import { AppShell } from './components/AppShell.js';
+import { Onboarding } from './components/Onboarding.js';
 
 type Health = { status: string; env: string } | null;
 
@@ -54,7 +55,7 @@ export function App() {
       rail={<PhaseRailPlaceholder />}
       aside={<HealthIndicator />}
       chat={<PanePlaceholder title="Conversation" hint="Chat stream lands in #18 / #19." />}
-      canvas={<PanePlaceholder title="Canvas" hint="Card host lands in #20 / #21." />}
+      canvas={<Onboarding />}
     />
   );
 }

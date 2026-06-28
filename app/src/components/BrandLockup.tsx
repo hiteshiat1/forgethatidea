@@ -1,36 +1,64 @@
+import { type CSSProperties } from 'react';
 import { color, gradient } from '@forge/shared';
 
+export type BrandVariant = 'topbar' | 'hero';
+
 export interface BrandLockupProps {
-  /** Font size of the wordmark. */
-  size?: number;
+  /** `topbar` is the compact inline lockup; `hero` is the large onboarding mark. */
+  variant?: BrandVariant;
 }
 
+const config: Record<BrandVariant, { fontSize: number; gap: number; stack: boolean }> = {
+  topbar: { fontSize: 18, gap: 6, stack: false },
+  hero: { fontSize: 56, gap: 4, stack: true },
+};
+
 /**
- * The "Forge / that idea" wordmark. The amber→coral signal gradient on "Forge"
- * is the heat of the forge. Full brand treatment is refined in Epic 1.2 (#14).
+ * The "Forge / that idea" lockup (Epic 1.2). The "Forge" wordmark carries the
+ * amber→coral signal gradient (the forge's heat); the "that idea" kicker uses
+ * the signal amber. Two sizes: compact for the top bar, hero for onboarding.
  */
-export function BrandLockup({ size = 18 }: BrandLockupProps) {
+export function BrandLockup({ variant = 'topbar' }: BrandLockupProps) {
+  const { fontSize, gap, stack } = config[variant];
+
+  const root: CSSProperties = {
+    fontFamily: 'var(--forge-font-sans)',
+    fontWeight: 700,
+    letterSpacing: '-0.02em',
+    lineHeight: 1.05,
+    userSelect: 'none',
+    display: stack ? 'flex' : 'inline-flex',
+    flexDirection: stack ? 'column' : 'row',
+    alignItems: stack ? 'flex-start' : 'baseline',
+    gap,
+    whiteSpace: stack ? 'normal' : 'nowrap',
+  };
+
   return (
-    <span
-      style={{
-        fontFamily: 'var(--forge-font-sans)',
-        fontSize: size,
-        fontWeight: 700,
-        letterSpacing: '-0.01em',
-        whiteSpace: 'nowrap',
-        userSelect: 'none',
-      }}
-    >
+    <span style={root} aria-label="Forge that idea">
       <span
+        aria-hidden
         style={{
+          fontSize,
           background: gradient.signal,
           WebkitBackgroundClip: 'text',
           WebkitTextFillColor: 'transparent',
         }}
       >
         Forge
-      </span>{' '}
-      <span style={{ color: color.slate[300], fontWeight: 400 }}>that idea</span>
+      </span>
+      <span
+        aria-hidden
+        style={{
+          fontSize: stack ? fontSize * 0.42 : fontSize,
+          fontWeight: stack ? 500 : 400,
+          color: color.signal.amber,
+          letterSpacing: stack ? '0.04em' : '-0.01em',
+          textTransform: stack ? 'lowercase' : 'none',
+        }}
+      >
+        that idea
+      </span>
     </span>
   );
 }
