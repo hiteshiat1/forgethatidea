@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { color, PHASES, PHASE_LABELS } from '@forge/shared';
+import { color } from '@forge/shared';
 import { Pill } from '@forge/shared/ui';
 import { AppShell } from './components/AppShell.js';
 import { Onboarding } from './components/Onboarding.js';
+import { PhaseRail } from './components/PhaseRail.js';
 
 type Health = { status: string; env: string } | null;
 
@@ -23,19 +24,6 @@ function HealthIndicator() {
   return <Pill tone={tone}>{label}</Pill>;
 }
 
-/** Temporary phase-rail stand-in occupying the rail slot until Epic 1.3 (#15). */
-function PhaseRailPlaceholder() {
-  return (
-    <div style={{ display: 'flex', gap: 8, overflow: 'hidden' }}>
-      {PHASES.map((phase, i) => (
-        <Pill key={phase} tone={i === 0 ? 'signal' : 'neutral'}>
-          {PHASE_LABELS[phase]}
-        </Pill>
-      ))}
-    </div>
-  );
-}
-
 function PanePlaceholder({ title, hint }: { title: string; hint: string }) {
   return (
     <div style={{ padding: 'var(--forge-space-6)', color: color.slate[400] }}>
@@ -52,7 +40,7 @@ function PanePlaceholder({ title, hint }: { title: string; hint: string }) {
 export function App() {
   return (
     <AppShell
-      rail={<PhaseRailPlaceholder />}
+      rail={<PhaseRail current="onboarding" />}
       aside={<HealthIndicator />}
       chat={<PanePlaceholder title="Conversation" hint="Chat stream lands in #18 / #19." />}
       canvas={<Onboarding />}
