@@ -1,0 +1,48 @@
+/* Forge design tokens — CSS custom properties. Mirror of tokens/index.ts. */
+:root {
+  /* Ink base scale */
+  --forge-ink-900: #0b0c0f;
+  --forge-ink-800: #121419;
+  --forge-ink-700: #1a1d24;
+  --forge-ink-600: #242832;
+  --forge-ink-500: #323744;
+
+  /* Slate text/border scale */
+  --forge-slate-400: #6b7280;
+  --forge-slate-300: #9aa3b2;
+  --forge-slate-200: #c7cdd8;
+  --forge-slate-100: #e8ebf0;
+
+  /* Signal (amber -> coral) */
+  --forge-signal-amber: #ffb338;
+  --forge-signal-coral: #ff6b5e;
+  --forge-gradient-signal: linear-gradient(135deg, #ffb338 0%, #ff6b5e 100%);
+
+  /* Semantic */
+  --forge-success: #3ecf8e;
+  --forge-warning: #ffb338;
+  --forge-danger: #ff5a5f;
+
+  /* Type */
+  --forge-font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --forge-font-mono: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+
+  /* Radius */
+  --forge-radius-sm: 6px;
+  --forge-radius-md: 10px;
+  --forge-radius-lg: 16px;
+  --forge-radius-pill: 999px;
+
+  /* Space */
+  --forge-space-1: 4px;
+  --forge-space-2: 8px;
+  --forge-space-3: 12px;
+  --forge-space-4: 16px;
+  --forge-space-6: 24px;
+  --forge-space-8: 32px;
+  --forge-space-12: 48px;
+
+  /* Elevation */
+  --forge-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.25);
+  --forge-shadow-glow: 0 0 0 1px rgba(255, 179, 56, 0.3), 0 0 24px rgba(255, 107, 94, 0.25);
+}

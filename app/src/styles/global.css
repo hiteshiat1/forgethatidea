@@ -1,0 +1,22 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--forge-ink-900);
+  color: var(--forge-slate-100);
+  font-family: var(--forge-font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--forge-signal-amber);
+}

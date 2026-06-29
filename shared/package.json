@@ -1,0 +1,25 @@
+{
+  "name": "@forge/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tokens": "./src/tokens/index.ts",
+    "./tokens.css": "./src/tokens/tokens.css",
+    "./ui": "./src/ui/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.json"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.2",
+    "react": "^19.0.0",
+    "typescript": "^5.7.2"
+  }
+}
