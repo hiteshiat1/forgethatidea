@@ -108,6 +108,10 @@ importers:
         version: 2.1.9(@types/node@22.20.0)
 
   shared:
+    dependencies:
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
     devDependencies:
       '@types/react':
         specifier: ^19.0.2
