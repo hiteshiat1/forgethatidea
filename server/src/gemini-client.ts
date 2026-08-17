@@ -41,6 +41,12 @@ export interface StreamMessageHandlers {
   onToolUse?: (block: ToolUseBlock) => void;
 }
 
+export interface StreamMessageResult {
+  inputTokens: number;
+  outputTokens: number;
+  stopReason: string | null;
+}
+
 export interface Logger {
   info: (obj: Record<string, unknown>, msg: string) => void;
   warn: (obj: Record<string, unknown>, msg: string) => void;
@@ -126,7 +132,7 @@ export function createGeminiClient(deps: GeminiClientDeps) {
   async function streamMessage(
     request: StreamMessageRequest,
     handlers: StreamMessageHandlers,
-  ): Promise<void> {
+  ): Promise<StreamMessageResult> {
     let attempt = 0;
     for (;;) {
       try {
@@ -176,7 +182,7 @@ export function createGeminiClient(deps: GeminiClientDeps) {
           },
           'gemini generateContent completed',
         );
-        return;
+        return { inputTokens, outputTokens, stopReason: finishReason ?? null };
       } catch (err) {
         if (isRetryable(err) && attempt < retry.maxRetries) {
           const delay = retry.baseDelayMs * 2 ** attempt;

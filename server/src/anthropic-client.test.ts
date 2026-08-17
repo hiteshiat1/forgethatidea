@@ -78,6 +78,18 @@ describe('createAnthropicClient', () => {
     );
   });
 
+  it('resolves with usage and stop reason for the caller', async () => {
+    const sdk = fakeSdkClient([], { input_tokens: 42, output_tokens: 7 });
+    const client = createAnthropicClient({ sdkClient: sdk as never, logger: silentLogger() });
+
+    const result = await client.streamMessage(
+      { model: 'claude-opus-5', maxTokens: 100, messages: [{ role: 'user', content: 'hi' }] },
+      {},
+    );
+
+    expect(result).toEqual({ inputTokens: 42, outputTokens: 7, stopReason: 'end_turn' });
+  });
+
   it('retries transient failures with backoff, then succeeds', async () => {
     let attempts = 0;
     const sdk = {

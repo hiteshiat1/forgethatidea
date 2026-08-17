@@ -38,6 +38,12 @@ export interface StreamMessageHandlers {
   onToolUse?: (block: ToolUseBlock) => void;
 }
 
+export interface StreamMessageResult {
+  inputTokens: number;
+  outputTokens: number;
+  stopReason: string | null;
+}
+
 export interface Logger {
   info: (obj: Record<string, unknown>, msg: string) => void;
   warn: (obj: Record<string, unknown>, msg: string) => void;
@@ -102,7 +108,7 @@ export function createOpenAiClient(deps: OpenAiClientDeps) {
   async function streamMessage(
     request: StreamMessageRequest,
     handlers: StreamMessageHandlers,
-  ): Promise<void> {
+  ): Promise<StreamMessageResult> {
     let attempt = 0;
     for (;;) {
       try {
@@ -145,7 +151,11 @@ export function createOpenAiClient(deps: OpenAiClientDeps) {
           },
           'openai chat completion completed',
         );
-        return;
+        return {
+          inputTokens: final.usage.prompt_tokens,
+          outputTokens: final.usage.completion_tokens,
+          stopReason: final.choices[0]?.finish_reason ?? null,
+        };
       } catch (err) {
         if (isRetryable(err) && attempt < retry.maxRetries) {
           const delay = retry.baseDelayMs * 2 ** attempt;

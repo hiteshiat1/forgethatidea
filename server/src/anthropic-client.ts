@@ -31,6 +31,12 @@ export interface StreamMessageHandlers {
   onToolUse?: (block: ToolUseBlock) => void;
 }
 
+export interface StreamMessageResult {
+  inputTokens: number;
+  outputTokens: number;
+  stopReason: string;
+}
+
 export interface Logger {
   info: (obj: Record<string, unknown>, msg: string) => void;
   warn: (obj: Record<string, unknown>, msg: string) => void;
@@ -93,7 +99,7 @@ export function createAnthropicClient(deps: AnthropicClientDeps) {
   async function streamMessage(
     request: StreamMessageRequest,
     handlers: StreamMessageHandlers,
-  ): Promise<void> {
+  ): Promise<StreamMessageResult> {
     let attempt = 0;
     for (;;) {
       try {
@@ -132,7 +138,11 @@ export function createAnthropicClient(deps: AnthropicClientDeps) {
           },
           'anthropic message completed',
         );
-        return;
+        return {
+          inputTokens: final.usage.input_tokens,
+          outputTokens: final.usage.output_tokens,
+          stopReason: final.stop_reason,
+        };
       } catch (err) {
         if (isRetryable(err) && attempt < retry.maxRetries) {
           const delay = retry.baseDelayMs * 2 ** attempt;

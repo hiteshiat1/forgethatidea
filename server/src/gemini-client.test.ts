@@ -85,6 +85,23 @@ describe('createGeminiClient', () => {
     );
   });
 
+  it('resolves with usage and stop reason for the caller', async () => {
+    const sdk = fakeSdkClient([
+      {
+        candidates: [{ content: { parts: [{ text: 'ok' }] }, finishReason: 'STOP' }],
+        usageMetadata: { promptTokenCount: 42, candidatesTokenCount: 7 },
+      },
+    ]);
+    const client = createGeminiClient({ sdkClient: sdk as never, logger: silentLogger() });
+
+    const result = await client.streamMessage(
+      { model: 'gemini-3-pro', maxTokens: 100, messages: [{ role: 'user', content: 'hi' }] },
+      {},
+    );
+
+    expect(result).toEqual({ inputTokens: 42, outputTokens: 7, stopReason: 'STOP' });
+  });
+
   it('supports image/multimodal input in the request shape', async () => {
     const sdk = fakeSdkClient([
       {

@@ -18,12 +18,20 @@ import {
   createSdkClient as createGeminiSdkClient,
   type GeminiClientDeps,
 } from './gemini-client.js';
+import {
+  createModelRouter,
+  createUnconfiguredProviderClient,
+  DEFAULT_TASK_REGISTRY,
+  DEFAULT_PRICING,
+  DEFAULT_FALLBACK_MODEL,
+} from './model-router.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
     anthropic?: ReturnType<typeof createAnthropicClient>;
     openai?: ReturnType<typeof createOpenAiClient>;
     gemini?: ReturnType<typeof createGeminiClient>;
+    modelRouter: ReturnType<typeof createModelRouter>;
   }
 }
 
@@ -36,6 +44,8 @@ export interface BuildAppDeps {
   openAiClient?: ReturnType<typeof createOpenAiClient>;
   /** Gemini API wrapper (Epic 0.9c). Defaults to a real SDK client keyed by env. */
   geminiClient?: ReturnType<typeof createGeminiClient>;
+  /** Multi-provider model router (Epic 0.9d). Defaults to real clients wired from env. */
+  modelRouter?: ReturnType<typeof createModelRouter>;
 }
 
 /**
@@ -69,36 +79,58 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
   // Onboarding schema + persistence (Epic 1.4).
   registerOnboardingRoutes(app, deps.onboardingStore ?? createInMemoryOnboardingStore());
 
-  // Anthropic Messages API wrapper (Epic 0.9). Consumed by the agent tool-call
-  // dispatch loop (#2.4) once it lands; only constructed when a key is present
-  // so the server still boots without one in dev/test.
-  if (deps.anthropicClient) {
-    app.decorate('anthropic', deps.anthropicClient);
-  } else if (env.ANTHROPIC_API_KEY) {
-    const sdkClient = createAnthropicSdkClient(env.ANTHROPIC_API_KEY);
-    const anthropicDeps: AnthropicClientDeps = { sdkClient, logger: app.log };
-    app.decorate('anthropic', createAnthropicClient(anthropicDeps));
-  }
+  // Anthropic Messages API wrapper (Epic 0.9). Only constructed when a key is
+  // present so the server still boots without one in dev/test.
+  const anthropicClient =
+    deps.anthropicClient ??
+    (env.ANTHROPIC_API_KEY
+      ? createAnthropicClient({
+          sdkClient: createAnthropicSdkClient(env.ANTHROPIC_API_KEY),
+          logger: app.log,
+        } satisfies AnthropicClientDeps)
+      : undefined);
+  if (anthropicClient) app.decorate('anthropic', anthropicClient);
 
-  // OpenAI API wrapper (Epic 0.9b). Consumed by the multi-provider model
-  // router (0.9d) once it lands; only constructed when a key is present.
-  if (deps.openAiClient) {
-    app.decorate('openai', deps.openAiClient);
-  } else if (env.OPENAI_API_KEY) {
-    const sdkClient = createOpenAiSdkClient(env.OPENAI_API_KEY);
-    const openAiDeps: OpenAiClientDeps = { sdkClient, logger: app.log };
-    app.decorate('openai', createOpenAiClient(openAiDeps));
-  }
+  // OpenAI API wrapper (Epic 0.9b). Only constructed when a key is present.
+  const openAiClient =
+    deps.openAiClient ??
+    (env.OPENAI_API_KEY
+      ? createOpenAiClient({
+          sdkClient: createOpenAiSdkClient(env.OPENAI_API_KEY),
+          logger: app.log,
+        } satisfies OpenAiClientDeps)
+      : undefined);
+  if (openAiClient) app.decorate('openai', openAiClient);
 
-  // Gemini API wrapper (Epic 0.9c). Consumed by the multi-provider model
-  // router (0.9d) once it lands; only constructed when a key is present.
-  if (deps.geminiClient) {
-    app.decorate('gemini', deps.geminiClient);
-  } else if (env.GEMINI_API_KEY) {
-    const sdkClient = createGeminiSdkClient(env.GEMINI_API_KEY);
-    const geminiDeps: GeminiClientDeps = { sdkClient, logger: app.log };
-    app.decorate('gemini', createGeminiClient(geminiDeps));
-  }
+  // Gemini API wrapper (Epic 0.9c). Only constructed when a key is present.
+  const geminiClient =
+    deps.geminiClient ??
+    (env.GEMINI_API_KEY
+      ? createGeminiClient({
+          sdkClient: createGeminiSdkClient(env.GEMINI_API_KEY),
+          logger: app.log,
+        } satisfies GeminiClientDeps)
+      : undefined);
+  if (geminiClient) app.decorate('gemini', geminiClient);
+
+  // Multi-provider model router (Epic 0.9d). The single entry point the agent
+  // tool-call dispatch loop (#2.4) will use — never talks to individual
+  // provider clients directly. Providers with no key configured fall back to
+  // a stub client that throws clearly if a task's route ever needs them.
+  const modelRouter =
+    deps.modelRouter ??
+    createModelRouter({
+      clients: {
+        anthropic: anthropicClient ?? createUnconfiguredProviderClient('anthropic'),
+        openai: openAiClient ?? createUnconfiguredProviderClient('openai'),
+        gemini: geminiClient ?? createUnconfiguredProviderClient('gemini'),
+      },
+      taskRegistry: DEFAULT_TASK_REGISTRY,
+      pricing: DEFAULT_PRICING,
+      fallbackModel: DEFAULT_FALLBACK_MODEL,
+      logger: app.log,
+    });
+  app.decorate('modelRouter', modelRouter);
 
   return app;
 }
