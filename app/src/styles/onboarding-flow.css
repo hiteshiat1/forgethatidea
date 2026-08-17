@@ -1,0 +1,128 @@
+/* Typeform-style onboarding flow (Epic 1.5). One question at a time. */
+
+.ob-flow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--forge-space-8);
+  height: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: var(--forge-space-8);
+  justify-content: center;
+}
+
+/* ---- Progress ---- */
+.ob-flow__progress {
+  display: flex;
+  align-items: center;
+  gap: var(--forge-space-3);
+}
+.ob-flow__progress-track {
+  flex: 1;
+  height: 4px;
+  border-radius: var(--forge-radius-pill);
+  background: var(--forge-ink-600);
+  overflow: hidden;
+}
+.ob-flow__progress-fill {
+  height: 100%;
+  border-radius: var(--forge-radius-pill);
+  background: var(--forge-gradient-signal);
+  transition: width 240ms ease;
+}
+.ob-flow__progress-count {
+  font-family: var(--forge-font-mono);
+  font-size: 0.75rem;
+  color: var(--forge-slate-400);
+  white-space: nowrap;
+}
+
+/* ---- Question body ---- */
+.ob-flow__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--forge-space-3);
+}
+.ob-flow__prompt {
+  font-family: var(--forge-font-sans);
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--forge-slate-100);
+}
+.ob-flow__hint {
+  font-size: 0.9375rem;
+  color: var(--forge-slate-400);
+  margin: 0;
+}
+
+/* ---- Text inputs ---- */
+.ob-flow__input {
+  width: 100%;
+  font-family: var(--forge-font-sans);
+  font-size: 1rem;
+  color: var(--forge-slate-100);
+  background: var(--forge-ink-800);
+  border: 1px solid var(--forge-ink-500);
+  border-radius: var(--forge-radius-md);
+  padding: 12px 14px;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+.ob-flow__input--multiline {
+  resize: vertical;
+  min-height: 96px;
+  line-height: 1.5;
+}
+.ob-flow__input::placeholder {
+  color: var(--forge-slate-400);
+}
+.ob-flow__input:focus {
+  outline: none;
+  border-color: var(--forge-signal-amber);
+  box-shadow: 0 0 0 3px rgba(255, 179, 56, 0.15);
+}
+
+/* ---- Single-choice ---- */
+.ob-flow__choices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--forge-space-2);
+}
+.ob-flow__choice {
+  text-align: left;
+  font-family: var(--forge-font-sans);
+  font-size: 1rem;
+  color: var(--forge-slate-200);
+  background: var(--forge-ink-800);
+  border: 1px solid var(--forge-ink-500);
+  border-radius: var(--forge-radius-md);
+  padding: 12px 14px;
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
+    color 120ms ease;
+}
+.ob-flow__choice:hover {
+  border-color: var(--forge-slate-400);
+}
+.ob-flow__choice--selected {
+  border-color: var(--forge-signal-amber);
+  background: rgba(255, 179, 56, 0.12);
+  color: var(--forge-signal-amber);
+}
+
+/* ---- Errors & actions ---- */
+.ob-flow__error {
+  font-size: 0.875rem;
+  color: var(--forge-danger);
+  margin: 0;
+}
+.ob-flow__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--forge-space-3);
+}

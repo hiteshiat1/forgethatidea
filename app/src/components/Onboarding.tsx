@@ -1,16 +1,24 @@
-import { color } from '@forge/shared';
+import { useState } from 'react';
+import { color, type OnboardingResponses } from '@forge/shared';
 import { Button } from '@forge/shared/ui';
 import { BrandLockup } from './BrandLockup.js';
+import { OnboardingFlow } from './OnboardingFlow.js';
 
 export interface OnboardingProps {
-  onStart?: () => void;
+  /** Fired once the interview is submitted with validated responses. */
+  onComplete?: (responses: OnboardingResponses) => void;
 }
 
 /**
- * Onboarding entry view (Epic 1.2 consumption point). Hosts the hero brand
- * lockup; the Typeform-style question flow itself lands in Epic 1.5 (#17).
+ * Onboarding entry view (Epic 1.2 consumption point). Shows the hero brand
+ * lockup, then hands off to the Typeform-style question flow (Epic 1.5, #17)
+ * once the user starts forging.
  */
-export function Onboarding({ onStart }: OnboardingProps) {
+export function Onboarding({ onComplete }: OnboardingProps) {
+  const [started, setStarted] = useState(false);
+
+  if (started) return <OnboardingFlow onComplete={onComplete} />;
+
   return (
     <div
       style={{
@@ -28,7 +36,7 @@ export function Onboarding({ onStart }: OnboardingProps) {
         time.
       </p>
       <div>
-        <Button variant="primary" onClick={onStart}>
+        <Button variant="primary" onClick={() => setStarted(true)}>
           Start forging
         </Button>
       </div>
