@@ -15,6 +15,10 @@ const envSchema = z.object({
   // required in production.
   ANTHROPIC_API_KEY: z.string().optional(),
 
+  // OpenAI (Epic 0.9b). Optional everywhere for now — the model router (0.9d)
+  // will hard-require it in production only when a task routes to OpenAI.
+  OPENAI_API_KEY: z.string().optional(),
+
   // Postgres (Epic 0.7). Same treatment.
   DATABASE_URL: z.string().url().optional(),
 

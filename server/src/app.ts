@@ -5,13 +5,19 @@ import { type OnboardingStore, createInMemoryOnboardingStore } from './onboardin
 import { registerOnboardingRoutes } from './routes/onboarding.js';
 import {
   createAnthropicClient,
-  createSdkClient,
+  createSdkClient as createAnthropicSdkClient,
   type AnthropicClientDeps,
 } from './anthropic-client.js';
+import {
+  createOpenAiClient,
+  createSdkClient as createOpenAiSdkClient,
+  type OpenAiClientDeps,
+} from './openai-client.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
     anthropic?: ReturnType<typeof createAnthropicClient>;
+    openai?: ReturnType<typeof createOpenAiClient>;
   }
 }
 
@@ -20,6 +26,8 @@ export interface BuildAppDeps {
   onboardingStore?: OnboardingStore;
   /** Anthropic Messages API wrapper (Epic 0.9). Defaults to a real SDK client keyed by env. */
   anthropicClient?: ReturnType<typeof createAnthropicClient>;
+  /** OpenAI API wrapper (Epic 0.9b). Defaults to a real SDK client keyed by env. */
+  openAiClient?: ReturnType<typeof createOpenAiClient>;
 }
 
 /**
@@ -59,9 +67,19 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
   if (deps.anthropicClient) {
     app.decorate('anthropic', deps.anthropicClient);
   } else if (env.ANTHROPIC_API_KEY) {
-    const sdkClient = createSdkClient(env.ANTHROPIC_API_KEY);
+    const sdkClient = createAnthropicSdkClient(env.ANTHROPIC_API_KEY);
     const anthropicDeps: AnthropicClientDeps = { sdkClient, logger: app.log };
     app.decorate('anthropic', createAnthropicClient(anthropicDeps));
+  }
+
+  // OpenAI API wrapper (Epic 0.9b). Consumed by the multi-provider model
+  // router (0.9d) once it lands; only constructed when a key is present.
+  if (deps.openAiClient) {
+    app.decorate('openai', deps.openAiClient);
+  } else if (env.OPENAI_API_KEY) {
+    const sdkClient = createOpenAiSdkClient(env.OPENAI_API_KEY);
+    const openAiDeps: OpenAiClientDeps = { sdkClient, logger: app.log };
+    app.decorate('openai', createOpenAiClient(openAiDeps));
   }
 
   return app;
