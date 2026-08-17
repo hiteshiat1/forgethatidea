@@ -92,6 +92,18 @@ describe('createOpenAiClient', () => {
     );
   });
 
+  it('resolves with usage and stop reason for the caller', async () => {
+    const sdk = fakeSdkClient([], { prompt_tokens: 42, completion_tokens: 7 });
+    const client = createOpenAiClient({ sdkClient: sdk as never, logger: silentLogger() });
+
+    const result = await client.streamMessage(
+      { model: 'gpt-5', maxTokens: 100, messages: [{ role: 'user', content: 'hi' }] },
+      {},
+    );
+
+    expect(result).toEqual({ inputTokens: 42, outputTokens: 7, stopReason: 'stop' });
+  });
+
   it('retries transient failures with backoff, then succeeds', async () => {
     let attempts = 0;
     const sdk = {
