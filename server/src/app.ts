@@ -13,11 +13,17 @@ import {
   createSdkClient as createOpenAiSdkClient,
   type OpenAiClientDeps,
 } from './openai-client.js';
+import {
+  createGeminiClient,
+  createSdkClient as createGeminiSdkClient,
+  type GeminiClientDeps,
+} from './gemini-client.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
     anthropic?: ReturnType<typeof createAnthropicClient>;
     openai?: ReturnType<typeof createOpenAiClient>;
+    gemini?: ReturnType<typeof createGeminiClient>;
   }
 }
 
@@ -28,6 +34,8 @@ export interface BuildAppDeps {
   anthropicClient?: ReturnType<typeof createAnthropicClient>;
   /** OpenAI API wrapper (Epic 0.9b). Defaults to a real SDK client keyed by env. */
   openAiClient?: ReturnType<typeof createOpenAiClient>;
+  /** Gemini API wrapper (Epic 0.9c). Defaults to a real SDK client keyed by env. */
+  geminiClient?: ReturnType<typeof createGeminiClient>;
 }
 
 /**
@@ -80,6 +88,16 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
     const sdkClient = createOpenAiSdkClient(env.OPENAI_API_KEY);
     const openAiDeps: OpenAiClientDeps = { sdkClient, logger: app.log };
     app.decorate('openai', createOpenAiClient(openAiDeps));
+  }
+
+  // Gemini API wrapper (Epic 0.9c). Consumed by the multi-provider model
+  // router (0.9d) once it lands; only constructed when a key is present.
+  if (deps.geminiClient) {
+    app.decorate('gemini', deps.geminiClient);
+  } else if (env.GEMINI_API_KEY) {
+    const sdkClient = createGeminiSdkClient(env.GEMINI_API_KEY);
+    const geminiDeps: GeminiClientDeps = { sdkClient, logger: app.log };
+    app.decorate('gemini', createGeminiClient(geminiDeps));
   }
 
   return app;
