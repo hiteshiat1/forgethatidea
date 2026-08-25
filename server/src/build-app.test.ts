@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildApp } from './app.js';
+import { buildApp } from './build-app.js';
 import { loadEnv } from './env.js';
 import { createInMemoryOnboardingStore } from './onboarding-store.js';
 
