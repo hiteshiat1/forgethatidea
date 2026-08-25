@@ -3,11 +3,22 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./tokens": "./src/tokens/index.ts",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./tokens": {
+      "types": "./dist/tokens/index.d.ts",
+      "default": "./dist/tokens/index.js"
+    },
     "./tokens.css": "./src/tokens/tokens.css",
-    "./ui": "./src/ui/index.ts"
+    "./ui": {
+      "types": "./dist/ui/index.d.ts",
+      "default": "./dist/ui/index.js"
+    }
   },
   "scripts": {
     "lint": "eslint .",
