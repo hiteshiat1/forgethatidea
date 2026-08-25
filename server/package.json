@@ -3,11 +3,11 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "main": "dist/index.js",
+  "main": "dist/standalone.js",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch src/standalone.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js",
+    "start": "node dist/standalone.js",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"

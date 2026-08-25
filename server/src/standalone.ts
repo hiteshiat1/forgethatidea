@@ -1,4 +1,4 @@
-import { buildApp } from './app.js';
+import { buildApp } from './build-app.js';
 import { loadEnv } from './env.js';
 
 async function main() {
