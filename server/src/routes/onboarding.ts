@@ -15,7 +15,7 @@ const SESSION_HEADER = 'x-forge-session';
 export function registerOnboardingRoutes(app: FastifyInstance, store: OnboardingStore) {
   app.post('/api/onboarding', async (request, reply) => {
     const result = validateOnboarding(request.body);
-    if (!result.ok) {
+    if (result.data === null) {
       return reply.status(400).send({ error: 'validation_failed', fields: result.errors });
     }
 

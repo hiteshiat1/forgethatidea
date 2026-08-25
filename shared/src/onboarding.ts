@@ -97,23 +97,31 @@ export const ONBOARDING_QUESTIONS: readonly OnboardingQuestion[] = [
   },
 ] as const;
 
+export type OnboardingFieldErrors = Partial<Record<keyof OnboardingResponses, string>>;
+
+export interface OnboardingValidationResult {
+  ok: boolean;
+  data: OnboardingResponses | null;
+  errors: OnboardingFieldErrors | null;
+}
+
 /**
  * Validate a partial/unknown set of responses against {@link onboardingSchema}.
  * Returns the parsed data on success, or a field→message map on failure so the
  * UI can show inline errors and the server can reject incomplete submissions.
+ * `data` and `errors` are independently nullable (rather than a discriminated
+ * union on `ok`) so callers narrow on each field directly.
  */
-export function validateOnboarding(
-  input: unknown,
-):
-  | { ok: true; data: OnboardingResponses }
-  | { ok: false; errors: Partial<Record<keyof OnboardingResponses, string>> } {
+export function validateOnboarding(input: unknown): OnboardingValidationResult {
   const result = onboardingSchema.safeParse(input);
-  if (result.success) return { ok: true, data: result.data };
+  if (result.success) {
+    return { ok: true, data: result.data, errors: null };
+  }
 
-  const errors: Partial<Record<keyof OnboardingResponses, string>> = {};
+  const errors: OnboardingFieldErrors = {};
   for (const issue of result.error.issues) {
     const key = issue.path[0] as keyof OnboardingResponses | undefined;
     if (key && !errors[key]) errors[key] = issue.message;
   }
-  return { ok: false, errors };
+  return { ok: false, data: null, errors };
 }

@@ -63,20 +63,21 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
 
   async function submit() {
     const result = validateOnboarding(answers);
-    if (!result.ok) {
+    if (result.data === null) {
       setShowError(true);
       return;
     }
+    const { data } = result;
     setSubmitting(true);
     setSubmitError(null);
     try {
       const res = await fetch('/api/onboarding', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(result.data),
+        body: JSON.stringify(data),
       });
       if (!res.ok) throw new Error(`Server responded ${res.status}`);
-      onComplete?.(result.data);
+      onComplete?.(data);
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Something went wrong. Try again.');
     } finally {
