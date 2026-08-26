@@ -33,3 +33,6 @@ logs/
 
 # vercel
 .vercel
+
+# Spike outputs (throwaway, regenerated on each run)
+server/scripts/spike-manifest-to-app/results/
