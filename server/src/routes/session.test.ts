@@ -91,7 +91,7 @@ describe('GET /api/sessions/latest', () => {
       method: 'PATCH',
       url: `/api/sessions/${sessionId}`,
       headers: { cookie: authCookie },
-      payload: { phase: 'brainstorm' },
+      payload: { phase: 'sources' },
     });
 
     const res = await app.inject({
@@ -100,7 +100,7 @@ describe('GET /api/sessions/latest', () => {
       headers: { cookie: authCookie },
     });
 
-    expect(res.json()).toMatchObject({ id: sessionId, phase: 'brainstorm' });
+    expect(res.json()).toMatchObject({ id: sessionId, phase: 'sources' });
     await app.close();
   });
 });
@@ -196,6 +196,79 @@ describe('PATCH /api/sessions/:id', () => {
     });
 
     expect(res.statusCode).toBe(400);
+    await app.close();
+  });
+
+  it('rejects skipping ahead more than one phase (phase state machine, #28)', async () => {
+    const { app } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: authCookie },
+    });
+    const sessionId = created.json().id;
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/sessions/${sessionId}`,
+      headers: { cookie: authCookie },
+      payload: { phase: 'planning' },
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toMatchObject({
+      error: 'illegal_phase_transition',
+      from: 'onboarding',
+      to: 'planning',
+    });
+    await app.close();
+  });
+
+  it('allows a legal single-step phase advance and persists it', async () => {
+    const { app } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: authCookie },
+    });
+    const sessionId = created.json().id;
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/sessions/${sessionId}`,
+      headers: { cookie: authCookie },
+      payload: { phase: 'sources' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ phase: 'sources' });
+    await app.close();
+  });
+
+  it('allows updating chat/cards without a phase change', async () => {
+    const { app } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: authCookie },
+    });
+    const sessionId = created.json().id;
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/sessions/${sessionId}`,
+      headers: { cookie: authCookie },
+      payload: { chat: [{ role: 'user', text: 'hi' }] },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ phase: 'onboarding', chat: [{ role: 'user', text: 'hi' }] });
     await app.close();
   });
 

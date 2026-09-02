@@ -4,6 +4,7 @@ import { PHASES } from '@forge/shared';
 import { requireAuth } from './auth.js';
 import { type AuthStore } from '../auth/auth-store.js';
 import { type SessionStore } from '../session-store.js';
+import { transition, IllegalTransitionError } from '../phase-machine.js';
 
 const updateSchema = z.object({
   phase: z.enum(PHASES).optional(),
@@ -68,6 +69,24 @@ export function registerSessionRoutes(
       const existing = await store.get(request.params.id);
       if (!existing || existing.userId !== request.userId) {
         return reply.status(404).send({ error: 'session_not_found' });
+      }
+
+      // Phase state machine (Epic 2.1): a phase change must be a legal
+      // transition from the session's current phase — never an arbitrary
+      // jump. Chat/cards updates don't touch the phase and skip this check.
+      if (parsed.data.phase !== undefined) {
+        try {
+          transition(existing.phase, parsed.data.phase);
+        } catch (err) {
+          if (err instanceof IllegalTransitionError) {
+            return reply.status(409).send({
+              error: 'illegal_phase_transition',
+              from: err.from,
+              to: err.to,
+            });
+          }
+          throw err;
+        }
       }
 
       const updated = await store.update(request.params.id, parsed.data);
