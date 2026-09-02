@@ -1,4 +1,5 @@
-import Fastify, { type FastifyInstance } from 'fastify';
+import { randomUUID } from 'node:crypto';
+import Fastify, { type FastifyInstance, type FastifyError } from 'fastify';
 import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
 import { loadEnv, type Env } from './env.js';
@@ -73,10 +74,43 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
             }
           : undefined,
     },
+    // Observability (Epic 0.10): correlate a request end-to-end. Reuse an
+    // incoming x-request-id (from a client or upstream proxy) when present,
+    // so a single trace ID can be followed across service boundaries.
+    genReqId: (request) => {
+      const incoming = request.headers['x-request-id'];
+      return typeof incoming === 'string' && incoming.length > 0 ? incoming : randomUUID();
+    },
   });
 
   app.register(cors, { origin: env.WEB_ORIGIN, credentials: true });
   app.register(cookie);
+
+  // Echo the correlated request ID back so callers/proxies can log against it.
+  app.addHook('onRequest', async (request, reply) => {
+    reply.header('x-request-id', request.id);
+  });
+
+  // Structured error capture with context (Epic 0.10). Logs every error with
+  // its request ID, method, and URL; hides raw error messages in production
+  // so internals never leak to a client, while dev/test see the real message.
+  app.setErrorHandler((error: FastifyError, request, reply) => {
+    const statusCode = error.statusCode ?? 500;
+    request.log.error(
+      { err: error, reqId: request.id, method: request.method, url: request.url },
+      'request failed',
+    );
+
+    if (statusCode >= 500) {
+      return reply.status(statusCode).send({
+        error: 'internal_server_error',
+        message: env.NODE_ENV === 'production' ? 'An unexpected error occurred.' : error.message,
+        reqId: request.id,
+      });
+    }
+
+    return reply.status(statusCode).send({ error: error.name, message: error.message });
+  });
 
   // Deploy skeleton health check (Epic 0.6). Reports liveness only — no secrets.
   app.get('/health', async () => ({

@@ -91,6 +91,69 @@ describe('auth wiring', () => {
   });
 });
 
+describe('request id correlation', () => {
+  it('echoes a client-supplied x-request-id back on the response', async () => {
+    const app = buildApp(testEnv());
+    const res = await app.inject({
+      method: 'GET',
+      url: '/health',
+      headers: { 'x-request-id': 'client-req-abc' },
+    });
+    expect(res.headers['x-request-id']).toBe('client-req-abc');
+    await app.close();
+  });
+
+  it('generates a request id when none is supplied', async () => {
+    const app = buildApp(testEnv());
+    const res = await app.inject({ method: 'GET', url: '/health' });
+    expect(res.headers['x-request-id']).toEqual(expect.any(String));
+    expect(String(res.headers['x-request-id']).length).toBeGreaterThan(0);
+    await app.close();
+  });
+});
+
+describe('error handling', () => {
+  it('returns a structured 500 body and does not leak the raw error message in production', async () => {
+    const env = { ...testEnv(), NODE_ENV: 'production' as const };
+    const app = buildApp(env);
+    app.get('/__boom', async () => {
+      throw new Error('sensitive internal detail');
+    });
+    const res = await app.inject({ method: 'GET', url: '/__boom' });
+
+    expect(res.statusCode).toBe(500);
+    const body = res.json();
+    expect(body).toMatchObject({ error: 'internal_server_error' });
+    expect(body.message).not.toMatch(/sensitive internal detail/);
+    expect(res.headers['x-request-id']).toEqual(expect.any(String));
+    await app.close();
+  });
+
+  it('surfaces the real error message outside production', async () => {
+    const app = buildApp(testEnv());
+    app.get('/__boom', async () => {
+      throw new Error('dev detail');
+    });
+    const res = await app.inject({ method: 'GET', url: '/__boom' });
+
+    expect(res.statusCode).toBe(500);
+    expect(res.json()).toMatchObject({ error: 'internal_server_error', message: 'dev detail' });
+    await app.close();
+  });
+
+  it('preserves a thrown error status code (e.g. from reply.code)', async () => {
+    const app = buildApp(testEnv());
+    app.get('/__teapot', async () => {
+      const err = new Error('nope') as Error & { statusCode: number };
+      err.statusCode = 418;
+      throw err;
+    });
+    const res = await app.inject({ method: 'GET', url: '/__teapot' });
+    expect(res.statusCode).toBe(418);
+    await app.close();
+  });
+});
+
 describe('health check', () => {
   it('returns ok', async () => {
     const app = buildApp(testEnv());
