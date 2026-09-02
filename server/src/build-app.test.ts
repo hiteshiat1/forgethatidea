@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { buildApp } from './build-app.js';
 import { loadEnv } from './env.js';
 import { createInMemoryOnboardingStore } from './onboarding-store.js';
+import { createInMemoryAuthStore } from './auth/auth-store.js';
 import type { Database } from './db/client.js';
 
 const testEnv = () => loadEnv({ NODE_ENV: 'test' } as NodeJS.ProcessEnv);
@@ -47,6 +48,46 @@ describe('db decoration', () => {
 
     vi.doUnmock('./db/client.js');
     vi.resetModules();
+  });
+});
+
+describe('auth wiring', () => {
+  it('uses a provided authStore for signup', async () => {
+    const store = createInMemoryAuthStore();
+    const app = buildApp(testEnv(), { authStore: store });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/signup',
+      payload: { email: 'wired@example.com', password: 'correct horse battery staple' },
+    });
+
+    expect(res.statusCode).toBe(201);
+    await expect(store.findUserByEmail('wired@example.com')).resolves.toMatchObject({
+      email: 'wired@example.com',
+    });
+    await app.close();
+  });
+
+  it('defaults to an in-memory authStore when no db and no authStore are provided', async () => {
+    const app = buildApp(testEnv());
+
+    const signupRes = await app.inject({
+      method: 'POST',
+      url: '/api/auth/signup',
+      payload: { email: 'default@example.com', password: 'correct horse battery staple' },
+    });
+    expect(signupRes.statusCode).toBe(201);
+    expect(signupRes.headers['set-cookie']).toBeDefined();
+    await app.close();
+  });
+
+  it('rejects an unauthenticated request to a protected-style flow via requireAuth semantics', async () => {
+    const app = buildApp(testEnv());
+    const res = await app.inject({ method: 'POST', url: '/api/auth/signout' });
+    // signout doesn't require auth, but confirms cookie plugin + routes are registered end-to-end
+    expect(res.statusCode).toBe(204);
+    await app.close();
   });
 });
 

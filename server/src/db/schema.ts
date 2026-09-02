@@ -9,8 +9,28 @@ import { pgTable, uuid, text, timestamp, jsonb, integer, pgEnum } from 'drizzle-
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
   email: text('email').notNull().unique(),
+  /** argon2id hash (Epic 0.8) — never the plaintext password. */
+  passwordHash: text('password_hash').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Login sessions (Epic 0.8) — deliberately separate from the `sessions`
+ * table below, which is the product/build session (phase state machine).
+ * A login persists across many product sessions and has its own lifecycle
+ * (sign in/out, expiry), so conflating the two would tie a user's login to
+ * a single build session's lifetime.
+ */
+export const authSessions = pgTable('auth_sessions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  /** SHA-256 hash of the session token — the raw token lives only in the client's cookie. */
+  tokenHash: text('token_hash').notNull().unique(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
 });
 
 export const phaseEnum = pgEnum('phase', [

@@ -1,8 +1,11 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
+import cookie from '@fastify/cookie';
 import { loadEnv, type Env } from './env.js';
 import { type OnboardingStore, createInMemoryOnboardingStore } from './onboarding-store.js';
 import { registerOnboardingRoutes } from './routes/onboarding.js';
+import { type AuthStore, createDbAuthStore, createInMemoryAuthStore } from './auth/auth-store.js';
+import { registerAuthRoutes } from './routes/auth.js';
 import {
   createAnthropicClient,
   createSdkClient as createAnthropicSdkClient,
@@ -50,6 +53,8 @@ export interface BuildAppDeps {
   modelRouter?: ReturnType<typeof createModelRouter>;
   /** Postgres/Drizzle client (Epic 0.7). Defaults to a real pooled client keyed by DATABASE_URL. */
   db?: Database;
+  /** Auth persistence (Epic 0.8). Defaults to DB-backed when `db` is available, else in-memory. */
+  authStore?: AuthStore;
 }
 
 /**
@@ -71,6 +76,7 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
   });
 
   app.register(cors, { origin: env.WEB_ORIGIN, credentials: true });
+  app.register(cookie);
 
   // Deploy skeleton health check (Epic 0.6). Reports liveness only — no secrets.
   app.get('/health', async () => ({
@@ -87,6 +93,11 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
 
   // Onboarding schema + persistence (Epic 1.4).
   registerOnboardingRoutes(app, deps.onboardingStore ?? createInMemoryOnboardingStore());
+
+  // Auth (Epic 0.8): email/password sign-up/sign-in, httpOnly session cookies.
+  // DB-backed when a db client is available, otherwise in-memory (dev/test).
+  const authStore = deps.authStore ?? (db ? createDbAuthStore(db) : createInMemoryAuthStore());
+  registerAuthRoutes(app, authStore);
 
   // Anthropic Messages API wrapper (Epic 0.9). Only constructed when a key is
   // present so the server still boots without one in dev/test.
