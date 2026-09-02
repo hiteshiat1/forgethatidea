@@ -25,6 +25,7 @@ import {
   DEFAULT_PRICING,
   DEFAULT_FALLBACK_MODEL,
 } from './model-router.js';
+import { createDbClient, type Database } from './db/client.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -32,6 +33,7 @@ declare module 'fastify' {
     openai?: ReturnType<typeof createOpenAiClient>;
     gemini?: ReturnType<typeof createGeminiClient>;
     modelRouter: ReturnType<typeof createModelRouter>;
+    db?: Database;
   }
 }
 
@@ -46,6 +48,8 @@ export interface BuildAppDeps {
   geminiClient?: ReturnType<typeof createGeminiClient>;
   /** Multi-provider model router (Epic 0.9d). Defaults to real clients wired from env. */
   modelRouter?: ReturnType<typeof createModelRouter>;
+  /** Postgres/Drizzle client (Epic 0.7). Defaults to a real pooled client keyed by DATABASE_URL. */
+  db?: Database;
 }
 
 /**
@@ -75,6 +79,11 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
     env: env.NODE_ENV,
     uptime: process.uptime(),
   }));
+
+  // Postgres/Drizzle client (Epic 0.7). Only constructed when DATABASE_URL is
+  // present so the server still boots without one in dev/test.
+  const db = deps.db ?? (env.DATABASE_URL ? createDbClient(env.DATABASE_URL) : undefined);
+  if (db) app.decorate('db', db);
 
   // Onboarding schema + persistence (Epic 1.4).
   registerOnboardingRoutes(app, deps.onboardingStore ?? createInMemoryOnboardingStore());
