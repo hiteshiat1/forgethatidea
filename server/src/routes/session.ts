@@ -1,10 +1,11 @@
 import { type FastifyInstance, type FastifyRequest, type FastifyReply } from 'fastify';
 import { z } from 'zod';
-import { PHASES } from '@forge/shared';
+import { PHASES, type Phase } from '@forge/shared';
 import { requireAuth } from './auth.js';
 import { type AuthStore } from '../auth/auth-store.js';
 import { type SessionStore } from '../session-store.js';
-import { transition, IllegalTransitionError } from '../phase-machine.js';
+import { transition, IllegalTransitionError, canTransition } from '../phase-machine.js';
+import { checkGate, type SessionCard } from '../phase-gates.js';
 
 const updateSchema = z.object({
   phase: z.enum(PHASES).optional(),
@@ -87,10 +88,49 @@ export function registerSessionRoutes(
           }
           throw err;
         }
+
+        // Phase gate enforcement (Epic 2.2): a structurally legal transition
+        // can still be blocked by content rules — e.g. build requires all
+        // four deliverable cards locked first. Evaluated against the
+        // session's *current* cards, since this update's own `cards` (if
+        // any) haven't been persisted yet.
+        const cards = (parsed.data.cards ?? existing.cards) as SessionCard[];
+        const gate = checkGate(parsed.data.phase, cards);
+        if (!gate.passed) {
+          return reply.status(409).send({
+            error: 'phase_gate_not_satisfied',
+            to: parsed.data.phase,
+            missing: gate.missing,
+          });
+        }
       }
 
       const updated = await store.update(request.params.id, parsed.data);
       return reply.status(200).send(updated);
+    },
+  );
+
+  // Gate status (Epic 2.2): "gate status queryable by UI" — lets the client
+  // show progress toward unlocking the next phase without attempting (and
+  // getting rejected by) a real PATCH.
+  app.get<{ Params: { id: string } }>(
+    '/api/sessions/:id/gate',
+    { preHandler: auth },
+    async (request, reply) => {
+      const session = await store.get(request.params.id);
+      if (!session || session.userId !== request.userId) {
+        return reply.status(404).send({ error: 'session_not_found' });
+      }
+
+      const currentIndex = PHASES.indexOf(session.phase);
+      const next: Phase | null =
+        currentIndex < PHASES.length - 1 ? PHASES[currentIndex + 1]! : null;
+      if (!next || !canTransition(session.phase, next)) {
+        return reply.status(200).send({ next: null, passed: true, missing: [] });
+      }
+
+      const gate = checkGate(next, session.cards as SessionCard[]);
+      return reply.status(200).send({ next, ...gate });
     },
   );
 }

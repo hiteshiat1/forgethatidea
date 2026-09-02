@@ -294,4 +294,212 @@ describe('PATCH /api/sessions/:id', () => {
     expect(res.statusCode).toBe(404);
     await app.close();
   });
+
+  it('blocks entering build without the four required cards locked (phase gate, #29)', async () => {
+    const { app } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: authCookie },
+    });
+    const sessionId = created.json().id;
+
+    // Walk to `planning`, the phase immediately before `build`.
+    for (const phase of ['sources', 'brainstorm', 'planning']) {
+      await app.inject({
+        method: 'PATCH',
+        url: `/api/sessions/${sessionId}`,
+        headers: { cookie: authCookie },
+        payload: { phase },
+      });
+    }
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/sessions/${sessionId}`,
+      headers: { cookie: authCookie },
+      payload: { phase: 'build' },
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toMatchObject({
+      error: 'phase_gate_not_satisfied',
+      to: 'build',
+      missing: expect.arrayContaining(['options', 'architecture', 'cost', 'marketing']),
+    });
+    await app.close();
+  });
+
+  it('allows entering build once all four required cards are locked', async () => {
+    const { app } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: authCookie },
+    });
+    const sessionId = created.json().id;
+
+    const lockedCards = ['options', 'architecture', 'cost', 'marketing'].map((type) => ({
+      id: `${type}-1`,
+      type,
+      status: 'locked',
+    }));
+
+    for (const phase of ['sources', 'brainstorm', 'planning']) {
+      await app.inject({
+        method: 'PATCH',
+        url: `/api/sessions/${sessionId}`,
+        headers: { cookie: authCookie },
+        payload: { phase },
+      });
+    }
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/sessions/${sessionId}`,
+      headers: { cookie: authCookie },
+      payload: { phase: 'build', cards: lockedCards },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ phase: 'build' });
+    await app.close();
+  });
+});
+
+describe('GET /api/sessions/:id/gate', () => {
+  it('reports the build gate as not passed with missing card types', async () => {
+    const { app } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: authCookie },
+    });
+    const sessionId = created.json().id;
+
+    for (const phase of ['sources', 'brainstorm', 'planning']) {
+      await app.inject({
+        method: 'PATCH',
+        url: `/api/sessions/${sessionId}`,
+        headers: { cookie: authCookie },
+        payload: { phase },
+      });
+    }
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/sessions/${sessionId}/gate`,
+      headers: { cookie: authCookie },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      next: 'build',
+      passed: false,
+      missing: expect.arrayContaining(['options', 'architecture', 'cost', 'marketing']),
+    });
+    await app.close();
+  });
+
+  it('reports the gate as passed once cards are locked, without mutating the session', async () => {
+    const { app } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: authCookie },
+    });
+    const sessionId = created.json().id;
+
+    const lockedCards = ['options', 'architecture', 'cost', 'marketing'].map((type) => ({
+      id: `${type}-1`,
+      type,
+      status: 'locked',
+    }));
+
+    for (const phase of ['sources', 'brainstorm', 'planning']) {
+      await app.inject({
+        method: 'PATCH',
+        url: `/api/sessions/${sessionId}`,
+        headers: { cookie: authCookie },
+        payload: { phase },
+      });
+    }
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/sessions/${sessionId}`,
+      headers: { cookie: authCookie },
+      payload: { cards: lockedCards },
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/sessions/${sessionId}/gate`,
+      headers: { cookie: authCookie },
+    });
+
+    expect(res.json()).toMatchObject({ next: 'build', passed: true, missing: [] });
+
+    const stillPlanning = await app.inject({
+      method: 'GET',
+      url: `/api/sessions/${sessionId}`,
+      headers: { cookie: authCookie },
+    });
+    expect(stillPlanning.json()).toMatchObject({ phase: 'planning' });
+    await app.close();
+  });
+
+  it('reports passed with no next phase for the terminal phase', async () => {
+    const { app } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: authCookie },
+    });
+    const sessionId = created.json().id;
+
+    const lockedCards = ['options', 'architecture', 'cost', 'marketing'].map((type) => ({
+      id: `${type}-1`,
+      type,
+      status: 'locked',
+    }));
+    for (const phase of ['sources', 'brainstorm', 'planning']) {
+      await app.inject({
+        method: 'PATCH',
+        url: `/api/sessions/${sessionId}`,
+        headers: { cookie: authCookie },
+        payload: { phase },
+      });
+    }
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/sessions/${sessionId}`,
+      headers: { cookie: authCookie },
+      payload: { phase: 'build', cards: lockedCards },
+    });
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/sessions/${sessionId}`,
+      headers: { cookie: authCookie },
+      payload: { phase: 'refine' },
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/sessions/${sessionId}/gate`,
+      headers: { cookie: authCookie },
+    });
+
+    expect(res.json()).toMatchObject({ next: null, passed: true, missing: [] });
+    await app.close();
+  });
 });
