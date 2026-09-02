@@ -11,6 +11,30 @@
   flex-shrink: 0;
 }
 
+.canvas-card__title {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--forge-space-2);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.canvas-card__index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--forge-radius-pill);
+  background: var(--forge-ink-600);
+  color: var(--forge-slate-300);
+  font-family: var(--forge-font-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+}
+
 .canvas-pane--empty {
   flex: 1;
   display: flex;
