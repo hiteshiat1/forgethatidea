@@ -8,6 +8,7 @@ import {
   createInMemoryCostGuardStore,
   CostCapExceededError,
 } from './cost-guard.js';
+import { createInMemorySessionStore } from './session-store.js';
 import type { Database } from './db/client.js';
 
 const testEnv = () => loadEnv({ NODE_ENV: 'test' } as NodeJS.ProcessEnv);
@@ -92,6 +93,51 @@ describe('auth wiring', () => {
     const res = await app.inject({ method: 'POST', url: '/api/auth/signout' });
     // signout doesn't require auth, but confirms cookie plugin + routes are registered end-to-end
     expect(res.statusCode).toBe(204);
+    await app.close();
+  });
+});
+
+describe('session wiring', () => {
+  it('uses a provided sessionStore for session creation, tied to the authenticated user', async () => {
+    const sessionStore = createInMemorySessionStore();
+    const app = buildApp(testEnv(), { sessionStore });
+
+    const signupRes = await app.inject({
+      method: 'POST',
+      url: '/api/auth/signup',
+      payload: { email: 'session-wired@example.com', password: 'correct horse battery staple' },
+    });
+    const setCookie = signupRes.headers['set-cookie'];
+    const authCookie = String(Array.isArray(setCookie) ? setCookie[0] : setCookie).split(';')[0]!;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: authCookie },
+    });
+
+    expect(res.statusCode).toBe(201);
+    const created = res.json();
+    await expect(sessionStore.get(created.id)).resolves.toMatchObject({ phase: 'onboarding' });
+    await app.close();
+  });
+
+  it('defaults to an in-memory sessionStore when no db and no sessionStore are provided', async () => {
+    const app = buildApp(testEnv());
+    const signupRes = await app.inject({
+      method: 'POST',
+      url: '/api/auth/signup',
+      payload: { email: 'session-default@example.com', password: 'correct horse battery staple' },
+    });
+    const setCookie = signupRes.headers['set-cookie'];
+    const authCookie = String(Array.isArray(setCookie) ? setCookie[0] : setCookie).split(';')[0]!;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: authCookie },
+    });
+    expect(res.statusCode).toBe(201);
     await app.close();
   });
 });

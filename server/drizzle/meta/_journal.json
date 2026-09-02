@@ -15,6 +15,13 @@
       "when": 1788386115442,
       "tag": "0001_remarkable_hawkeye",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788387475911,
+      "tag": "0002_glorious_warlock",
+      "breakpoints": true
     }
   ]
 }
