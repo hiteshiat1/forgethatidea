@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { color } from '@forge/shared';
 import { Pill } from '@forge/shared/ui';
 import { AppShell } from './components/AppShell.js';
+import { CanvasPane } from './components/CanvasPane.js';
 import { Onboarding } from './components/Onboarding.js';
 import { PhaseRail } from './components/PhaseRail.js';
 
@@ -38,12 +39,14 @@ function PanePlaceholder({ title, hint }: { title: string; hint: string }) {
  * placeholders that later Epic 1 issues fill in.
  */
 export function App() {
+  const [onboarded, setOnboarded] = useState(false);
+
   return (
     <AppShell
       rail={<PhaseRail current="onboarding" />}
       aside={<HealthIndicator />}
       chat={<PanePlaceholder title="Conversation" hint="Chat stream lands in #18 / #19." />}
-      canvas={<Onboarding />}
+      canvas={onboarded ? <CanvasPane /> : <Onboarding onComplete={() => setOnboarded(true)} />}
     />
   );
 }
