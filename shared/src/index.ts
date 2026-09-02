@@ -2,3 +2,4 @@
 export * from './tokens/index.js';
 export * from './phases.js';
 export * from './onboarding.js';
+export * from './manifest.js';
