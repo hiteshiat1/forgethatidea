@@ -46,6 +46,16 @@ export const sessions = pgTable('sessions', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
   phase: phaseEnum('phase').notNull().default('onboarding'),
+  /**
+   * Chat transcript and canvas card state (Epic 1.10), so a refresh or a
+   * resume restores exactly what the user left. Stored as flexible JSONB for
+   * now — kept intentionally generic (array of arbitrary message/card
+   * objects) since the real message and card schemas are formalized by the
+   * phase state machine (#28) and manifest schema (#32). Once those land,
+   * this can be tightened to a typed shape without changing the column.
+   */
+  chat: jsonb('chat').notNull().default([]),
+  cards: jsonb('cards').notNull().default([]),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   expiresAt: timestamp('expires_at', { withTimezone: true }),

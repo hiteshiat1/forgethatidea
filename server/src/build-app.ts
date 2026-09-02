@@ -8,6 +8,12 @@ import { registerOnboardingRoutes } from './routes/onboarding.js';
 import { type AuthStore, createDbAuthStore, createInMemoryAuthStore } from './auth/auth-store.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import {
+  type SessionStore,
+  createDbSessionStore,
+  createInMemorySessionStore,
+} from './session-store.js';
+import { registerSessionRoutes } from './routes/session.js';
+import {
   createCostGuard,
   createInMemoryCostGuardStore,
   CostCapExceededError,
@@ -63,6 +69,8 @@ export interface BuildAppDeps {
   db?: Database;
   /** Auth persistence (Epic 0.8). Defaults to DB-backed when `db` is available, else in-memory. */
   authStore?: AuthStore;
+  /** Product/build session persistence (Epic 1.10). Defaults to DB-backed when `db` is available, else in-memory. */
+  sessionStore?: SessionStore;
   /** Cost guardrail spend tracking (Epic 0.11). Defaults to in-memory; swap for DB-backed once persisted spend history is needed. */
   costGuardStore?: CostGuardStore;
   /** Full cost guardrail (Epic 0.11). Defaults to one built from env caps + costGuardStore. */
@@ -154,6 +162,13 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
   // DB-backed when a db client is available, otherwise in-memory (dev/test).
   const authStore = deps.authStore ?? (db ? createDbAuthStore(db) : createInMemoryAuthStore());
   registerAuthRoutes(app, authStore);
+
+  // Session persistence & resume (Epic 1.10): phase/chat/cards tied to the
+  // authenticated user. DB-backed when a db client is available, otherwise
+  // in-memory (dev/test) — same convention as the auth store above.
+  const sessionStore =
+    deps.sessionStore ?? (db ? createDbSessionStore(db) : createInMemorySessionStore());
+  registerSessionRoutes(app, authStore, sessionStore);
 
   // Anthropic Messages API wrapper (Epic 0.9). Only constructed when a key is
   // present so the server still boots without one in dev/test.
