@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { buildApp } from './build-app.js';
 import { loadEnv } from './env.js';
 import { createInMemoryOnboardingStore } from './onboarding-store.js';
+import type { Database } from './db/client.js';
 
 const testEnv = () => loadEnv({ NODE_ENV: 'test' } as NodeJS.ProcessEnv);
 
@@ -12,6 +13,42 @@ const validResponses = {
   technicalLevel: 'non-technical',
   goal: 'Validate demand before spending on a real build.',
 };
+
+describe('db decoration', () => {
+  it('decorates the app with a provided db client', async () => {
+    const fakeDb = { fake: true } as unknown as Database;
+    const app = buildApp(testEnv(), { db: fakeDb });
+    expect(app.db).toBe(fakeDb);
+    await app.close();
+  });
+
+  it('does not decorate the app when no db client is provided and DATABASE_URL is unset', async () => {
+    const app = buildApp(testEnv());
+    expect(app.db).toBeUndefined();
+    await app.close();
+  });
+
+  it('constructs a real db client from DATABASE_URL when present', async () => {
+    vi.doMock('./db/client.js', () => ({
+      createDbClient: vi.fn(() => ({ constructed: true })),
+    }));
+    vi.resetModules();
+
+    const { buildApp: buildAppFresh } = await import('./build-app.js');
+    const { loadEnv: loadEnvFresh } = await import('./env.js');
+    const env = loadEnvFresh({
+      NODE_ENV: 'test',
+      DATABASE_URL: 'postgres://user:pass@localhost:5432/db',
+    } as NodeJS.ProcessEnv);
+
+    const app = buildAppFresh(env);
+    expect(app.db).toEqual({ constructed: true });
+    await app.close();
+
+    vi.doUnmock('./db/client.js');
+    vi.resetModules();
+  });
+});
 
 describe('health check', () => {
   it('returns ok', async () => {

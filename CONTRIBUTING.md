@@ -29,6 +29,25 @@ pnpm test          # run tests
 pnpm format        # prettier --write
 ```
 
+### Database (Epic 0.7)
+
+The server needs Postgres for anything beyond the health check and the
+(currently in-memory) onboarding route. For local dev:
+
+```bash
+docker run -d --name forge-pg -e POSTGRES_USER=forge -e POSTGRES_PASSWORD=forge \
+  -e POSTGRES_DB=forge -p 5432:5432 postgres:16-alpine
+
+cd server
+pnpm db:migrate    # applies drizzle/*.sql — DATABASE_URL from .env
+pnpm db:studio     # optional: browse tables at https://local.drizzle.studio
+```
+
+Schema lives in `server/src/db/schema.ts`. After changing it, run
+`pnpm db:generate` (from `server/`) to produce a new migration file in
+`server/drizzle/`, then commit both the schema change and the generated
+migration together.
+
 ## Branching model
 
 - `main` is always deployable. CI must be green to merge.
