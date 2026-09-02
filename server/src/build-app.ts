@@ -8,6 +8,12 @@ import { registerOnboardingRoutes } from './routes/onboarding.js';
 import { type AuthStore, createDbAuthStore, createInMemoryAuthStore } from './auth/auth-store.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import {
+  createCostGuard,
+  createInMemoryCostGuardStore,
+  CostCapExceededError,
+  type CostGuardStore,
+} from './cost-guard.js';
+import {
   createAnthropicClient,
   createSdkClient as createAnthropicSdkClient,
   type AnthropicClientDeps,
@@ -38,6 +44,7 @@ declare module 'fastify' {
     gemini?: ReturnType<typeof createGeminiClient>;
     modelRouter: ReturnType<typeof createModelRouter>;
     db?: Database;
+    costGuard: ReturnType<typeof createCostGuard>;
   }
 }
 
@@ -56,6 +63,10 @@ export interface BuildAppDeps {
   db?: Database;
   /** Auth persistence (Epic 0.8). Defaults to DB-backed when `db` is available, else in-memory. */
   authStore?: AuthStore;
+  /** Cost guardrail spend tracking (Epic 0.11). Defaults to in-memory; swap for DB-backed once persisted spend history is needed. */
+  costGuardStore?: CostGuardStore;
+  /** Full cost guardrail (Epic 0.11). Defaults to one built from env caps + costGuardStore. */
+  costGuard?: ReturnType<typeof createCostGuard>;
 }
 
 /**
@@ -100,6 +111,17 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
       { err: error, reqId: request.id, method: request.method, url: request.url },
       'request failed',
     );
+
+    // Cost guardrails (Epic 0.11): a clear, machine-readable 429 so callers
+    // can distinguish "capped" from a generic server error.
+    if (error instanceof CostCapExceededError) {
+      return reply.status(429).send({
+        error: error.reason,
+        message: error.message,
+        spendCents: error.spendCents,
+        capCents: error.capCents,
+      });
+    }
 
     if (statusCode >= 500) {
       return reply.status(statusCode).send({
@@ -185,6 +207,20 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
       logger: app.log,
     });
   app.decorate('modelRouter', modelRouter);
+
+  // Cost guardrails (Epic 0.11): per-session and per-user daily spend caps
+  // on top of the model router's normalized costCents, so runaway AI usage
+  // is soft-warned then hard-stopped regardless of which provider served it.
+  const costGuard =
+    deps.costGuard ??
+    createCostGuard({
+      store: deps.costGuardStore ?? createInMemoryCostGuardStore(),
+      sessionCapCents: env.SESSION_COST_CAP_CENTS,
+      userDailyCapCents: env.USER_DAILY_COST_CAP_CENTS,
+      warnRatio: env.COST_CAP_WARN_RATIO,
+      logger: app.log,
+    });
+  app.decorate('costGuard', costGuard);
 
   return app;
 }

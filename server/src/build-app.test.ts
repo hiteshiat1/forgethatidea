@@ -3,6 +3,11 @@ import { buildApp } from './build-app.js';
 import { loadEnv } from './env.js';
 import { createInMemoryOnboardingStore } from './onboarding-store.js';
 import { createInMemoryAuthStore } from './auth/auth-store.js';
+import {
+  createCostGuard,
+  createInMemoryCostGuardStore,
+  CostCapExceededError,
+} from './cost-guard.js';
 import type { Database } from './db/client.js';
 
 const testEnv = () => loadEnv({ NODE_ENV: 'test' } as NodeJS.ProcessEnv);
@@ -150,6 +155,47 @@ describe('error handling', () => {
     });
     const res = await app.inject({ method: 'GET', url: '/__teapot' });
     expect(res.statusCode).toBe(418);
+    await app.close();
+  });
+});
+
+describe('cost guard decoration', () => {
+  it('decorates the app with a provided costGuard', async () => {
+    const store = createInMemoryCostGuardStore();
+    const costGuard = createCostGuard({
+      store,
+      sessionCapCents: 100,
+      userDailyCapCents: 500,
+      warnRatio: 0.8,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+    });
+    const app = buildApp(testEnv(), { costGuard });
+    expect(app.costGuard).toBe(costGuard);
+    await app.close();
+  });
+
+  it('constructs a default costGuard from env caps when none is provided', async () => {
+    const app = buildApp(testEnv());
+    expect(app.costGuard).toBeDefined();
+    await expect(
+      app.costGuard.checkBeforeCall({ sessionId: 's1', userId: 'u1' }),
+    ).resolves.toBeUndefined();
+    await app.close();
+  });
+
+  it('returns a clear 429 error body when a route throws CostCapExceededError', async () => {
+    const app = buildApp(testEnv());
+    app.get('/__capped', async () => {
+      throw new CostCapExceededError('session_cap_exceeded', 100, 100);
+    });
+
+    const res = await app.inject({ method: 'GET', url: '/__capped' });
+    expect(res.statusCode).toBe(429);
+    expect(res.json()).toMatchObject({
+      error: 'session_cap_exceeded',
+      spendCents: 100,
+      capCents: 100,
+    });
     await app.close();
   });
 });

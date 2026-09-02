@@ -28,6 +28,14 @@ const envSchema = z.object({
 
   // CORS origin for the Vite app in dev/prod.
   WEB_ORIGIN: z.string().default('http://localhost:5173'),
+
+  // Cost guardrails (Epic 0.11). Ceilings in cents to prevent runaway AI
+  // spend; soft-warn logs as usage crosses the threshold, hard-stop rejects
+  // once the cap is reached. Defaults are conservative placeholders — tune
+  // per real usage once the product is live.
+  SESSION_COST_CAP_CENTS: z.coerce.number().positive().default(200), // $2.00/session
+  USER_DAILY_COST_CAP_CENTS: z.coerce.number().positive().default(1000), // $10.00/user/day
+  COST_CAP_WARN_RATIO: z.coerce.number().min(0).max(1).default(0.8), // warn at 80% of cap
 });
 
 export type Env = z.infer<typeof envSchema>;
