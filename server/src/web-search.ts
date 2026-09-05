@@ -122,6 +122,21 @@ interface TavilySearchResponse {
 }
 
 /**
+ * Minimal slice of the global `fetch` Response this client depends on.
+ * Typed explicitly (rather than relying on the ambient global `Response`
+ * type resolving from @types/node/lib.dom in every build environment) since
+ * that resolution proved inconsistent between local and Vercel builds —
+ * this makes the dependency exact and portable regardless of tsconfig lib
+ * settings.
+ */
+interface FetchResponse {
+  ok: boolean;
+  status: number;
+  statusText: string;
+  json(): Promise<unknown>;
+}
+
+/**
  * Real client backed by Tavily's search API — chosen because it returns
  * clean ranked snippets + URLs directly (no HTML scraping needed), which
  * matches this tool's "returns ranked snippets + URLs" contract with no
@@ -130,7 +145,7 @@ interface TavilySearchResponse {
 export function createTavilyWebSearchClient(apiKey: string): WebSearchClient {
   return {
     async search(query) {
-      const res = await fetch('https://api.tavily.com/search', {
+      const res: FetchResponse = await fetch('https://api.tavily.com/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ api_key: apiKey, query, max_results: 5 }),
