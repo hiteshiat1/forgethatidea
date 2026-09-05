@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
+import { type Phase } from '@forge/shared';
 import { Pill } from '@forge/shared/ui';
 import { AppShell } from './components/AppShell.js';
 import { CanvasPane } from './components/CanvasPane.js';
-import { ChatPane } from './components/ChatPane.js';
+import { ChatInput } from './components/ChatInput.js';
+import { ChatPane, type ChatMessage } from './components/ChatPane.js';
 import { Onboarding } from './components/Onboarding.js';
 import { PhaseRail } from './components/PhaseRail.js';
 
@@ -31,12 +33,23 @@ function HealthIndicator() {
  */
 export function App() {
   const [onboarded, setOnboarded] = useState(false);
+  const [phase] = useState<Phase>('onboarding');
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+
+  function handleSend(text: string) {
+    setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'user', text }]);
+  }
 
   return (
     <AppShell
-      rail={<PhaseRail current="onboarding" />}
+      rail={<PhaseRail current={phase} />}
       aside={<HealthIndicator />}
-      chat={<ChatPane messages={[]} />}
+      chat={
+        <div className="chat-column">
+          <ChatPane messages={messages} />
+          <ChatInput phase={phase} onSend={handleSend} />
+        </div>
+      }
       canvas={onboarded ? <CanvasPane /> : <Onboarding onComplete={() => setOnboarded(true)} />}
     />
   );
