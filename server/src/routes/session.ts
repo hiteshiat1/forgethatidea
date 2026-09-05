@@ -11,11 +11,18 @@ import {
   isRefinementFailure,
   type RefinementLimits,
 } from '../refinement-tracker.js';
+import { checkBrainstormStoppingRule } from '../brainstorm-logic.js';
 
 const updateSchema = z.object({
   phase: z.enum(PHASES).optional(),
   chat: z.array(z.unknown()).optional(),
   cards: z.array(z.unknown()).optional(),
+});
+
+const brainstormFindingsSchema = z.object({
+  icp: z.string().trim().min(1).optional(),
+  coreJob: z.string().trim().min(1).optional(),
+  differentiator: z.string().trim().min(1).optional(),
 });
 
 const refineSchema = z.object({
@@ -177,6 +184,49 @@ export function registerSessionRoutes(
       }
 
       return reply.status(200).send(result);
+    },
+  );
+
+  // Brainstorm findings (Epic 2.7): merges the given fields into the
+  // session's existing findings (never replaces — a caller reporting one
+  // newly-learned finding shouldn't wipe the others) and returns the
+  // stopping-rule status so the caller knows whether to keep asking
+  // questions or move on — "writes findings to manifest" is satisfied by
+  // persisting them on the session; promoting them into a real BuildManifest
+  // is the planning phase's job once one is created.
+  app.patch<{ Params: { id: string } }>(
+    '/api/sessions/:id/brainstorm',
+    { preHandler: auth },
+    async (request, reply) => {
+      const parsed = brainstormFindingsSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: 'validation_failed' });
+      }
+
+      const existing = await store.get(request.params.id);
+      if (!existing || existing.userId !== request.userId) {
+        return reply.status(404).send({ error: 'session_not_found' });
+      }
+
+      const merged = { ...existing.brainstormFindings, ...parsed.data };
+      const updated = await store.update(request.params.id, { brainstormFindings: merged });
+      const stoppingRule = checkBrainstormStoppingRule(merged);
+
+      return reply.status(200).send({ findings: updated!.brainstormFindings, ...stoppingRule });
+    },
+  );
+
+  app.get<{ Params: { id: string } }>(
+    '/api/sessions/:id/brainstorm',
+    { preHandler: auth },
+    async (request, reply) => {
+      const session = await store.get(request.params.id);
+      if (!session || session.userId !== request.userId) {
+        return reply.status(404).send({ error: 'session_not_found' });
+      }
+
+      const stoppingRule = checkBrainstormStoppingRule(session.brainstormFindings);
+      return reply.status(200).send({ findings: session.brainstormFindings, ...stoppingRule });
     },
   );
 }

@@ -1,0 +1,1 @@
+ALTER TABLE "sessions" ADD COLUMN "brainstorm_findings" jsonb DEFAULT '{}'::jsonb NOT NULL;
