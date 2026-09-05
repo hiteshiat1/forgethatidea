@@ -145,11 +145,15 @@ interface FetchResponse {
 export function createTavilyWebSearchClient(apiKey: string): WebSearchClient {
   return {
     async search(query) {
-      const res: FetchResponse = await fetch('https://api.tavily.com/search', {
+      // Cast through `unknown` rather than annotating the fetch() call
+      // directly: whatever ambient `Response`/`fetch` types a given build
+      // environment resolves (they've proven inconsistent between local and
+      // Vercel builds) is irrelevant once we control the shape ourselves.
+      const res = (await fetch('https://api.tavily.com/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ api_key: apiKey, query, max_results: 5 }),
-      });
+      })) as unknown as FetchResponse;
 
       if (!res.ok) {
         throw new Error(`Tavily search failed: ${res.status} ${res.statusText}`);
