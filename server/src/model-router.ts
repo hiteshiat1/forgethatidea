@@ -52,7 +52,7 @@ export interface NormalizedUsage {
   costCents: number;
 }
 
-interface ProviderStreamMessageResult {
+export interface ProviderStreamMessageResult {
   inputTokens: number;
   outputTokens: number;
   stopReason: string | null;
@@ -139,7 +139,14 @@ function isRetryable(err: unknown): boolean {
   return status !== undefined && RETRYABLE_STATUSES.has(status);
 }
 
-function normalizeUsage(
+/**
+ * Exported so callers that talk to a provider client directly (e.g. the
+ * agent orchestrator, which needs Anthropic's richer tool-calling content
+ * blocks the router's generic `streamMessage` doesn't expose) can still
+ * compute the same normalized cost-in-cents figure everything else uses,
+ * without duplicating the pricing math.
+ */
+export function normalizeUsage(
   pricing: PricingTable,
   provider: Provider,
   model: string,

@@ -87,7 +87,109 @@ describe('createAnthropicClient', () => {
       {},
     );
 
-    expect(result).toEqual({ inputTokens: 42, outputTokens: 7, stopReason: 'end_turn' });
+    expect(result).toEqual({
+      inputTokens: 42,
+      outputTokens: 7,
+      stopReason: 'end_turn',
+      content: [],
+    });
+  });
+
+  it('passes tool definitions through to the SDK call', async () => {
+    const sdk = fakeSdkClient([]);
+    const client = createAnthropicClient({ sdkClient: sdk as never, logger: silentLogger() });
+    const tools = [
+      { name: 'get_weather', description: 'Get the weather', inputSchema: { type: 'object' } },
+    ];
+
+    await client.streamMessage(
+      {
+        model: 'claude-opus-5',
+        maxTokens: 100,
+        messages: [{ role: 'user', content: 'hi' }],
+        tools,
+      },
+      {},
+    );
+
+    expect(sdk.messages.stream).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tools: [
+          { name: 'get_weather', description: 'Get the weather', input_schema: { type: 'object' } },
+        ],
+      }),
+    );
+  });
+
+  it('accepts rich content blocks (tool_use/tool_result) in message history, not just plain strings', async () => {
+    const sdk = fakeSdkClient([]);
+    const client = createAnthropicClient({ sdkClient: sdk as never, logger: silentLogger() });
+
+    await client.streamMessage(
+      {
+        model: 'claude-opus-5',
+        maxTokens: 100,
+        messages: [
+          { role: 'user', content: 'hi' },
+          {
+            role: 'assistant',
+            content: [{ type: 'tool_use', id: 'toolu_1', name: 'get_weather', input: {} }],
+          },
+          {
+            role: 'user',
+            content: [
+              { type: 'tool_result', tool_use_id: 'toolu_1', content: 'sunny', is_error: false },
+            ],
+          },
+        ],
+      },
+      {},
+    );
+
+    expect(sdk.messages.stream).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: [
+          { role: 'user', content: 'hi' },
+          {
+            role: 'assistant',
+            content: [{ type: 'tool_use', id: 'toolu_1', name: 'get_weather', input: {} }],
+          },
+          {
+            role: 'user',
+            content: [
+              { type: 'tool_result', tool_use_id: 'toolu_1', content: 'sunny', is_error: false },
+            ],
+          },
+        ],
+      }),
+    );
+  });
+
+  it('collects assistant content blocks (text + tool_use) into the result for building the next turn', async () => {
+    const sdk = fakeSdkClient([
+      { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Checking...' } },
+      {
+        type: 'content_block_start',
+        index: 1,
+        content_block: {
+          type: 'tool_use',
+          id: 'toolu_1',
+          name: 'get_weather',
+          input: { city: 'NYC' },
+        },
+      },
+    ]);
+    const client = createAnthropicClient({ sdkClient: sdk as never, logger: silentLogger() });
+
+    const result = await client.streamMessage(
+      { model: 'claude-opus-5', maxTokens: 100, messages: [{ role: 'user', content: 'hi' }] },
+      {},
+    );
+
+    expect(result.content).toEqual([
+      { type: 'text', text: 'Checking...' },
+      { type: 'tool_use', id: 'toolu_1', name: 'get_weather', input: { city: 'NYC' } },
+    ]);
   });
 
   it('retries transient failures with backoff, then succeeds', async () => {

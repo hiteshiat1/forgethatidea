@@ -14,9 +14,35 @@ export interface ToolUseBlock {
   input: unknown;
 }
 
+export interface TextBlock {
+  type: 'text';
+  text: string;
+}
+
+export interface ToolResultBlock {
+  type: 'tool_result';
+  tool_use_id: string;
+  content: string;
+  is_error: boolean;
+}
+
+/** A message's assistant-produced content — what `content` blocks look like when a model responds. */
+export type AssistantContentBlock = TextBlock | ToolUseBlock;
+
+/** A message's content when sent *to* the model — plain text, or tool_use/tool_result for multi-turn tool calling. */
+export type MessageContentBlock = TextBlock | ToolUseBlock | ToolResultBlock;
+
 export interface AnthropicMessageParam {
   role: 'user' | 'assistant';
-  content: string;
+  /** Plain text is shorthand for a single text block — richer turns (tool_use/tool_result) need the array form. */
+  content: string | MessageContentBlock[];
+}
+
+/** A tool definition offered to the model, in this codebase's naming convention (camelCase inputSchema). */
+export interface ToolDefinition {
+  name: string;
+  description: string;
+  inputSchema: unknown;
 }
 
 export interface StreamMessageRequest {
@@ -24,6 +50,8 @@ export interface StreamMessageRequest {
   maxTokens: number;
   system?: string;
   messages: AnthropicMessageParam[];
+  /** Tools the model may call this turn — omit for a plain text-only turn. */
+  tools?: ToolDefinition[];
 }
 
 export interface StreamMessageHandlers {
@@ -35,12 +63,26 @@ export interface StreamMessageResult {
   inputTokens: number;
   outputTokens: number;
   stopReason: string;
+  /**
+   * The assistant's full content blocks (text + tool_use, in order) — what
+   * the caller appends as the next turn's assistant message when continuing
+   * a multi-turn tool-calling conversation. Not just the aggregate text,
+   * since a tool_use block carries no text of its own to reconstruct from.
+   */
+  content: AssistantContentBlock[];
 }
 
 export interface Logger {
   info: (obj: Record<string, unknown>, msg: string) => void;
   warn: (obj: Record<string, unknown>, msg: string) => void;
   error: (obj: Record<string, unknown>, msg: string) => void;
+}
+
+/** Anthropic SDK's own snake_case tool shape — converted to/from this codebase's ToolDefinition at the boundary. */
+interface SdkToolDefinition {
+  name: string;
+  description: string;
+  input_schema: unknown;
 }
 
 /** Minimal slice of the Anthropic SDK client this wrapper depends on. */
@@ -51,6 +93,7 @@ export interface AnthropicSdkClient {
       max_tokens: number;
       system?: string;
       messages: AnthropicMessageParam[];
+      tools?: SdkToolDefinition[];
     }) => AsyncIterable<MessageStreamEvent> & {
       finalMessage: () => Promise<{
         id: string;
@@ -108,24 +151,52 @@ export function createAnthropicClient(deps: AnthropicClientDeps) {
           max_tokens: request.maxTokens,
           system: request.system,
           messages: request.messages,
+          tools: request.tools?.map(
+            (tool): SdkToolDefinition => ({
+              name: tool.name,
+              description: tool.description,
+              input_schema: tool.inputSchema,
+            }),
+          ),
         });
+
+        // Built up from streamed events rather than read off finalMessage(),
+        // so the SDK's raw content shape never needs parsing separately —
+        // this codebase's typed AssistantContentBlock is the only shape
+        // callers ever see.
+        const content: AssistantContentBlock[] = [];
+        const textByIndex = new Map<number, string>();
 
         for await (const event of stream) {
           if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
-            handlers.onText?.(event.delta.text ?? '');
+            const text = event.delta.text ?? '';
+            handlers.onText?.(text);
+            const index = event.index ?? 0;
+            textByIndex.set(index, (textByIndex.get(index) ?? '') + text);
           } else if (
             event.type === 'content_block_start' &&
             event.content_block?.type === 'tool_use'
           ) {
             const block = event.content_block;
-            handlers.onToolUse?.({
+            const toolUse: ToolUseBlock = {
               type: 'tool_use',
               id: block.id ?? '',
               name: block.name ?? '',
               input: block.input,
-            });
+            };
+            handlers.onToolUse?.(toolUse);
+            content.push(toolUse);
           }
         }
+
+        // Text blocks are inserted at the start, in index order: the API
+        // streams a text block's deltas together before any later tool_use
+        // block starts, so accumulated text always precedes tool_use blocks
+        // that arrived after it.
+        const textBlocks: AssistantContentBlock[] = Array.from(textByIndex.entries())
+          .sort(([a], [b]) => a - b)
+          .map(([, text]) => ({ type: 'text' as const, text }));
+        content.unshift(...textBlocks);
 
         const final = await stream.finalMessage();
         logger.info(
@@ -142,6 +213,7 @@ export function createAnthropicClient(deps: AnthropicClientDeps) {
           inputTokens: final.usage.input_tokens,
           outputTokens: final.usage.output_tokens,
           stopReason: final.stop_reason,
+          content,
         };
       } catch (err) {
         if (isRetryable(err) && attempt < retry.maxRetries) {
