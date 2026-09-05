@@ -6,7 +6,11 @@ import { type AuthStore } from '../auth/auth-store.js';
 import { type SessionStore } from '../session-store.js';
 import { transition, IllegalTransitionError, canTransition } from '../phase-machine.js';
 import { checkGate, type SessionCard } from '../phase-gates.js';
-import { recordRefinementRound, type RefinementLimits } from '../refinement-tracker.js';
+import {
+  recordRefinementRound,
+  isRefinementFailure,
+  type RefinementLimits,
+} from '../refinement-tracker.js';
 
 const updateSchema = z.object({
   phase: z.enum(PHASES).optional(),
@@ -165,7 +169,7 @@ export function registerSessionRoutes(
         refinementLimits,
       );
 
-      if (!result.ok) {
+      if (isRefinementFailure(result)) {
         if (result.error === 'session_not_found') {
           return reply.status(404).send({ error: 'session_not_found' });
         }

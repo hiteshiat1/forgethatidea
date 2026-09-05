@@ -7,10 +7,29 @@ export interface RefinementLimits {
   marketing: number;
 }
 
+export interface RecordRefinementRoundSuccess {
+  ok: true;
+  rounds: number;
+  limitReached: boolean;
+}
+
+export interface RecordRefinementRoundFailure {
+  ok: false;
+  error: 'refinement_limit_reached' | 'session_not_found';
+  kind?: RefinementKind;
+  rounds?: number;
+}
+
 export type RecordRefinementRoundResult =
-  | { ok: true; rounds: number; limitReached: boolean }
-  | { ok: false; error: 'refinement_limit_reached'; kind: RefinementKind; rounds: number }
-  | { ok: false; error: 'session_not_found' };
+  | RecordRefinementRoundSuccess
+  | RecordRefinementRoundFailure;
+
+/** Type guard so callers narrow without depending on `ok` discriminant inference. */
+export function isRefinementFailure(
+  result: RecordRefinementRoundResult,
+): result is RecordRefinementRoundFailure {
+  return result.ok === false;
+}
 
 const COUNTER_FIELD: Record<RefinementKind, 'appRefinementRounds' | 'marketingRefinementRounds'> = {
   app: 'appRefinementRounds',
@@ -46,7 +65,7 @@ export async function recordRefinementRound(
   const current = session[field];
 
   if (current >= limit) {
-    return { ok: false, error: 'refinement_limit_reached', kind, rounds: current };
+    return { ok: false, error: 'refinement_limit_reached', kind, rounds: current } as const;
   }
 
   const rounds = current + 1;
