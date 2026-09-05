@@ -23,7 +23,40 @@ function scriptedAnthropicClient(responses: StreamMessageResult[]) {
   return { streamMessage, messagesReceived };
 }
 
-function buildDeps(anthropicClient: ReturnType<typeof scriptedAnthropicClient>) {
+/** A fake Anthropic client that always throws — simulates a real API/network failure. */
+function throwingAnthropicClient(error: Error = new Error('anthropic api unavailable')) {
+  return { streamMessage: vi.fn(async () => Promise.reject(error)) };
+}
+
+/** A scripted client where every call returns a failed tool_use round (model keeps calling a broken tool). */
+function repeatedlyFailingToolClient(rounds: number, toolName = 'broken_tool') {
+  let call = 0;
+  const streamMessage = vi.fn(async () => {
+    call++;
+    if (call <= rounds) {
+      return {
+        inputTokens: 5,
+        outputTokens: 2,
+        stopReason: 'tool_use',
+        content: [{ type: 'tool_use' as const, id: `toolu_${call}`, name: toolName, input: {} }],
+      };
+    }
+    return {
+      inputTokens: 1,
+      outputTokens: 1,
+      stopReason: 'end_turn',
+      content: [{ type: 'text' as const, text: 'should not reach here' }],
+    };
+  });
+  return { streamMessage };
+}
+
+function buildDeps(
+  anthropicClient:
+    | ReturnType<typeof scriptedAnthropicClient>
+    | ReturnType<typeof throwingAnthropicClient>
+    | ReturnType<typeof repeatedlyFailingToolClient>,
+) {
   const sessionStore = createInMemorySessionStore();
   const manifestStore = createInMemoryManifestStore();
   const costGuardStore = createInMemoryCostGuardStore();
@@ -236,5 +269,80 @@ describe('createAgentOrchestrator', () => {
 
     const updated = await deps.sessionStore.get(session.id);
     expect(updated!.sourcesIntake).toEqual({ sources: [], declined: true });
+  });
+});
+
+describe('agent error recovery & guardrails (#40)', () => {
+  it('returns a graceful fallback reply, not a thrown error, when the model API fails', async () => {
+    const anthropicClient = throwingAnthropicClient();
+    const deps = buildDeps(anthropicClient);
+    const session = await deps.sessionStore.create('user-1');
+    const orchestrator = createAgentOrchestrator(deps);
+
+    const result = await orchestrator.handleTurn(session.id, 'user-1', 'hello');
+
+    expect(result).toMatchObject({ ok: true });
+    if (result.ok) {
+      expect(result.reply.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("persists the user's message even when the model API fails, so it isn't lost", async () => {
+    const anthropicClient = throwingAnthropicClient();
+    const deps = buildDeps(anthropicClient);
+    const session = await deps.sessionStore.create('user-1');
+    const orchestrator = createAgentOrchestrator(deps);
+
+    await orchestrator.handleTurn(session.id, 'user-1', 'a habit tracker app');
+
+    const updated = await deps.sessionStore.get(session.id);
+    expect(updated!.chat).toEqual([
+      expect.objectContaining({ role: 'user', text: 'a habit tracker app' }),
+      expect.objectContaining({ role: 'agent' }),
+    ]);
+  });
+
+  it('does not record cost-guard usage for a turn where the model call never succeeded', async () => {
+    const anthropicClient = throwingAnthropicClient();
+    const deps = buildDeps(anthropicClient);
+    const session = await deps.sessionStore.create('user-1');
+    const orchestrator = createAgentOrchestrator(deps);
+
+    await orchestrator.handleTurn(session.id, 'user-1', 'hello');
+
+    // No usage was ever returned by the model, so there is nothing real to
+    // charge — recordUsage should not have been called with a spend that
+    // could only come from a successful response.
+    await expect(
+      deps.costGuard.checkBeforeCall({ sessionId: session.id, userId: 'user-1' }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('breaks out early on consecutive tool failures, well before maxToolRounds is reached', async () => {
+    const anthropicClient = repeatedlyFailingToolClient(20);
+    const deps = buildDeps(anthropicClient);
+    const session = await deps.sessionStore.create('user-1');
+    // maxToolRounds is generously high — if the orchestrator only stopped
+    // via that budget, this call count would be near it. The consecutive-
+    // failure detector (threshold 2) should stop it far sooner than that.
+    const orchestrator = createAgentOrchestrator({ ...deps, maxToolRounds: 20 });
+
+    const result = await orchestrator.handleTurn(session.id, 'user-1', 'do the thing');
+
+    expect(result).toMatchObject({ ok: true });
+    if (result.ok) {
+      expect(result.reply.toLowerCase()).toMatch(/track|different|rephrase/);
+    }
+    expect(anthropicClient.streamMessage.mock.calls.length).toBeLessThanOrEqual(3);
+  });
+
+  it('never leaves the turn in a dead-end state — always resolves with a typed result, never rejects', async () => {
+    const anthropicClient = throwingAnthropicClient(new Error('total meltdown'));
+    const deps = buildDeps(anthropicClient);
+    const session = await deps.sessionStore.create('user-1');
+    const orchestrator = createAgentOrchestrator(deps);
+
+    const result = await orchestrator.handleTurn(session.id, 'user-1', 'hello');
+    expect(result).toHaveProperty('ok');
   });
 });

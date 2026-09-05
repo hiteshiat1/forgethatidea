@@ -68,6 +68,18 @@ export function isHandleTurnFailure(result: HandleTurnResult): result is HandleT
 const DEFAULT_MODEL = 'claude-opus-5';
 const DEFAULT_MAX_TOKENS = 2048;
 const DEFAULT_MAX_TOOL_ROUNDS = 5;
+/** Consecutive rounds where every tool call in the round errored, before giving up on this turn as "off track". */
+const MAX_CONSECUTIVE_FAILED_ROUNDS = 2;
+
+/**
+ * Agent error recovery & guardrails (Epic 2.13): the single fallback shown
+ * whenever the turn can't reach a real reply — a model API failure, or the
+ * agent stuck repeatedly failing the same tool call. Always the same
+ * message so it's recognizable and testable, and always `ok: true` (never a
+ * thrown error or a dead end) so the user is never blocked mid-conversation.
+ */
+const BACK_ON_TRACK_FALLBACK =
+  "I ran into trouble finishing that — let's try a different approach. Could you rephrase what you'd like?";
 
 const BUILT_IN_TOOL_SCHEMAS = {
   get_manifest: {
@@ -172,12 +184,25 @@ export function createAgentOrchestrator(deps: AgentOrchestratorDeps) {
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
     let finalText = '';
+    let consecutiveFailedRounds = 0;
+    let modelCallSucceededAtLeastOnce = false;
 
     for (let round = 0; round <= maxToolRounds; round++) {
-      const result = await anthropicClient.streamMessage(
-        { model, maxTokens, system, messages, tools },
-        {},
-      );
+      let result;
+      try {
+        result = await anthropicClient.streamMessage(
+          { model, maxTokens, system, messages, tools },
+          {},
+        );
+      } catch {
+        // Model API failure (network error, provider outage, exhausted the
+        // client's own retries, etc.) — this is exactly the "no dead-end
+        // states" case: never let a thrown error reach the caller as a
+        // crashed request. Fall back gracefully and stop this turn here.
+        finalText = BACK_ON_TRACK_FALLBACK;
+        break;
+      }
+      modelCallSucceededAtLeastOnce = true;
       totalInputTokens += result.inputTokens;
       totalOutputTokens += result.outputTokens;
 
@@ -205,18 +230,33 @@ export function createAgentOrchestrator(deps: AgentOrchestratorDeps) {
         })),
       });
 
+      // Off-track detection: if every tool call in this round errored, and
+      // that's happened for several rounds running, the model is stuck
+      // repeating the same mistake rather than genuinely retrying/repairing
+      // — stop feeding it more rounds and fall back instead of burning the
+      // full maxToolRounds budget on a conversation going nowhere.
+      const allFailedThisRound = toolResults.every((r) => r.isError);
+      consecutiveFailedRounds = allFailedThisRound ? consecutiveFailedRounds + 1 : 0;
+      if (consecutiveFailedRounds >= MAX_CONSECUTIVE_FAILED_ROUNDS) {
+        finalText = BACK_ON_TRACK_FALLBACK;
+        break;
+      }
+
       if (round === maxToolRounds) {
-        finalText =
-          "I ran into trouble finishing that — let's try a different approach. Could you rephrase what you'd like?";
+        finalText = BACK_ON_TRACK_FALLBACK;
       }
     }
 
-    const costCents = normalizeUsage(DEFAULT_PRICING, 'anthropic', model, {
-      inputTokens: totalInputTokens,
-      outputTokens: totalOutputTokens,
-      stopReason: null,
-    }).costCents;
-    await costGuard.recordUsage({ sessionId, userId }, costCents);
+    // Only charge for tokens actually returned by a successful model call —
+    // a turn that never got a real response has nothing real to bill.
+    if (modelCallSucceededAtLeastOnce) {
+      const costCents = normalizeUsage(DEFAULT_PRICING, 'anthropic', model, {
+        inputTokens: totalInputTokens,
+        outputTokens: totalOutputTokens,
+        stopReason: null,
+      }).costCents;
+      await costGuard.recordUsage({ sessionId, userId }, costCents);
+    }
 
     const newChat: ChatMessage[] = [
       ...(session.chat as ChatMessage[]),
