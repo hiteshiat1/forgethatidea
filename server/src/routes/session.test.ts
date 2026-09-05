@@ -12,7 +12,7 @@ async function buildTestApp() {
   const authStore = createInMemoryAuthStore();
   const sessionStore = createInMemorySessionStore();
   registerAuthRoutes(app, authStore);
-  registerSessionRoutes(app, authStore, sessionStore);
+  registerSessionRoutes(app, authStore, sessionStore, { app: 3, marketing: 3 });
   await app.ready();
   return { app, authStore, sessionStore };
 }
@@ -501,5 +501,137 @@ describe('GET /api/sessions/:id/gate', () => {
 
     expect(res.json()).toMatchObject({ next: null, passed: true, missing: [] });
     await app.close();
+  });
+});
+
+describe('POST /api/sessions/:id/refine', () => {
+  it('records a round and returns the updated count', async () => {
+    const { app } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: authCookie },
+    });
+    const sessionId = created.json().id;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${sessionId}/refine`,
+      headers: { cookie: authCookie },
+      payload: { kind: 'app' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ ok: true, rounds: 1, limitReached: false });
+  });
+
+  it('tracks app and marketing rounds independently via the route', async () => {
+    const { app } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: authCookie },
+    });
+    const sessionId = created.json().id;
+
+    await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${sessionId}/refine`,
+      headers: { cookie: authCookie },
+      payload: { kind: 'app' },
+    });
+    const marketingRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${sessionId}/refine`,
+      headers: { cookie: authCookie },
+      payload: { kind: 'marketing' },
+    });
+
+    expect(marketingRes.json()).toMatchObject({ ok: true, rounds: 1 });
+
+    const session = await app.inject({
+      method: 'GET',
+      url: `/api/sessions/${sessionId}`,
+      headers: { cookie: authCookie },
+    });
+    expect(session.json()).toMatchObject({ appRefinementRounds: 1, marketingRefinementRounds: 1 });
+  });
+
+  it('returns 429 with a gate signal once the free limit is reached', async () => {
+    const { app } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: authCookie },
+    });
+    const sessionId = created.json().id;
+
+    for (let i = 0; i < 3; i++) {
+      await app.inject({
+        method: 'POST',
+        url: `/api/sessions/${sessionId}/refine`,
+        headers: { cookie: authCookie },
+        payload: { kind: 'app' },
+      });
+    }
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${sessionId}/refine`,
+      headers: { cookie: authCookie },
+      payload: { kind: 'app' },
+    });
+
+    expect(res.statusCode).toBe(429);
+    expect(res.json()).toMatchObject({ error: 'refinement_limit_reached', kind: 'app', rounds: 3 });
+  });
+
+  it('rejects an invalid kind', async () => {
+    const { app } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: authCookie },
+    });
+    const sessionId = created.json().id;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${sessionId}/refine`,
+      headers: { cookie: authCookie },
+      payload: { kind: 'not-a-real-kind' },
+    });
+
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('404s when the session belongs to a different user', async () => {
+    const { app } = await buildTestApp();
+    const ownerCookie = await signUpAndGetCookie(app);
+    const otherCookie = await signUpAndGetCookie(app);
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: ownerCookie },
+    });
+    const sessionId = created.json().id;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${sessionId}/refine`,
+      headers: { cookie: otherCookie },
+      payload: { kind: 'app' },
+    });
+
+    expect(res.statusCode).toBe(404);
   });
 });

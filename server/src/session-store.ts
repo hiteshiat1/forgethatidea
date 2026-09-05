@@ -9,6 +9,9 @@ export interface SessionRecord {
   phase: Phase;
   chat: unknown[];
   cards: unknown[];
+  /** Refinement round counters (Epic 2.11) — app and marketing tracked independently. */
+  appRefinementRounds: number;
+  marketingRefinementRounds: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -17,6 +20,8 @@ export interface SessionUpdate {
   phase?: Phase;
   chat?: unknown[];
   cards?: unknown[];
+  appRefinementRounds?: number;
+  marketingRefinementRounds?: number;
 }
 
 /**
@@ -79,6 +84,8 @@ export function createInMemorySessionStore(): SessionStore {
         phase: 'onboarding',
         chat: [],
         cards: [],
+        appRefinementRounds: 0,
+        marketingRefinementRounds: 0,
         createdAt: now,
         updatedAt: now,
       };

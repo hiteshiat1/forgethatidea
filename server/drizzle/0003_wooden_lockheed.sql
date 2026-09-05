@@ -1,0 +1,2 @@
+ALTER TABLE "sessions" ADD COLUMN "app_refinement_rounds" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "sessions" ADD COLUMN "marketing_refinement_rounds" integer DEFAULT 0 NOT NULL;
