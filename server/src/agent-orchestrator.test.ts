@@ -184,4 +184,57 @@ describe('createAgentOrchestrator', () => {
     const result = await orchestrator.handleTurn('nonexistent', 'user-1', 'hello');
     expect(result).toEqual({ ok: false, error: 'session_not_found' });
   });
+
+  it('dispatches record_source (Epic 2.8) and persists it to session sourcesIntake', async () => {
+    const anthropicClient = scriptedAnthropicClient([
+      {
+        inputTokens: 10,
+        outputTokens: 5,
+        stopReason: 'tool_use',
+        content: [
+          { type: 'tool_use', id: 'toolu_1', name: 'record_source', input: { input: 'Notion' } },
+        ],
+      },
+      {
+        inputTokens: 5,
+        outputTokens: 3,
+        stopReason: 'end_turn',
+        content: [{ type: 'text', text: 'Got it, noted Notion as a reference.' }],
+      },
+    ]);
+    const deps = buildDeps(anthropicClient);
+    const session = await deps.sessionStore.create('user-1');
+    const orchestrator = createAgentOrchestrator(deps);
+
+    const result = await orchestrator.handleTurn(session.id, 'user-1', 'Notion is similar');
+
+    expect(result).toMatchObject({ ok: true });
+    const updated = await deps.sessionStore.get(session.id);
+    expect(updated!.sourcesIntake.sources).toEqual([{ type: 'text', value: 'Notion' }]);
+  });
+
+  it('dispatches decline_sources (Epic 2.8) and marks the intake declined', async () => {
+    const anthropicClient = scriptedAnthropicClient([
+      {
+        inputTokens: 10,
+        outputTokens: 5,
+        stopReason: 'tool_use',
+        content: [{ type: 'tool_use', id: 'toolu_1', name: 'decline_sources', input: {} }],
+      },
+      {
+        inputTokens: 5,
+        outputTokens: 3,
+        stopReason: 'end_turn',
+        content: [{ type: 'text', text: 'No problem, moving on.' }],
+      },
+    ]);
+    const deps = buildDeps(anthropicClient);
+    const session = await deps.sessionStore.create('user-1');
+    const orchestrator = createAgentOrchestrator(deps);
+
+    await orchestrator.handleTurn(session.id, 'user-1', 'none, nothing comes to mind');
+
+    const updated = await deps.sessionStore.get(session.id);
+    expect(updated!.sourcesIntake).toEqual({ sources: [], declined: true });
+  });
 });

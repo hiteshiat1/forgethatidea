@@ -12,6 +12,7 @@ import {
   type RefinementLimits,
 } from '../refinement-tracker.js';
 import { checkBrainstormStoppingRule } from '../brainstorm-logic.js';
+import { checkSourcesIntakeComplete } from '../sources-logic.js';
 
 const updateSchema = z.object({
   phase: z.enum(PHASES).optional(),
@@ -227,6 +228,24 @@ export function registerSessionRoutes(
 
       const stoppingRule = checkBrainstormStoppingRule(session.brainstormFindings);
       return reply.status(200).send({ findings: session.brainstormFindings, ...stoppingRule });
+    },
+  );
+
+  // Sources intake status (Epic 2.8): read-only, so the UI can show intake
+  // progress ("2 sources added" / "skipped") without polling via a mutating
+  // call. Recording sources/declining is the orchestrator's job (via the
+  // record_source/decline_sources tools) during the actual conversation.
+  app.get<{ Params: { id: string } }>(
+    '/api/sessions/:id/sources',
+    { preHandler: auth },
+    async (request, reply) => {
+      const session = await store.get(request.params.id);
+      if (!session || session.userId !== request.userId) {
+        return reply.status(404).send({ error: 'session_not_found' });
+      }
+
+      const status = checkSourcesIntakeComplete(session.sourcesIntake);
+      return reply.status(200).send({ ...session.sourcesIntake, ...status });
     },
   );
 }
