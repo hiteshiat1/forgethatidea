@@ -7,6 +7,7 @@ import { ChatInput } from './components/ChatInput.js';
 import { ChatPane, type ChatMessage } from './components/ChatPane.js';
 import { Onboarding } from './components/Onboarding.js';
 import { PhaseRail } from './components/PhaseRail.js';
+import { StatusIndicators } from './components/StatusIndicators.js';
 
 type Health = { status: string; env: string } | null;
 
@@ -35,6 +36,14 @@ export function App() {
   const [onboarded, setOnboarded] = useState(false);
   const [phase] = useState<Phase>('onboarding');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // Refinement round state (Epic 2.11) is server-tracked per session; the
+  // agent orchestrator (not yet built) is what will actually call
+  // POST /api/sessions/:id/refine and feed real counts back here. Starts at
+  // zero-of-limit, matching a freshly created session.
+  const [refinement] = useState({
+    app: { rounds: 0, limit: 3 },
+    marketing: { rounds: 0, limit: 3 },
+  });
 
   function handleSend(text: string) {
     setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'user', text }]);
@@ -43,7 +52,16 @@ export function App() {
   return (
     <AppShell
       rail={<PhaseRail current={phase} />}
-      aside={<HealthIndicator />}
+      aside={
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--forge-space-2)' }}>
+          <StatusIndicators
+            app={refinement.app}
+            marketing={refinement.marketing}
+            entitlement="free"
+          />
+          <HealthIndicator />
+        </div>
+      }
       chat={
         <div className="chat-column">
           <ChatPane messages={messages} />

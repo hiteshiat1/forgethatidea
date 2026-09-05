@@ -1,0 +1,7 @@
+/* Top bar status indicators (Epic 1.11). */
+
+.status-indicators {
+  display: flex;
+  align-items: center;
+  gap: var(--forge-space-2);
+}
