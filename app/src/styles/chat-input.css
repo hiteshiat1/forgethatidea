@@ -1,0 +1,54 @@
+/* Context-aware chat input (Epic 1.7). */
+
+.chat-column {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.chat-column .chat-pane {
+  flex: 1;
+  min-height: 0;
+}
+
+.chat-input {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--forge-space-2);
+  padding: var(--forge-space-3) var(--forge-space-4);
+  border-top: 1px solid var(--forge-ink-600);
+  background: var(--forge-ink-800);
+}
+
+.chat-input__field {
+  flex: 1;
+  min-height: 36px;
+  max-height: 160px;
+  padding: 8px 12px;
+  background: var(--forge-ink-700);
+  border: 1px solid var(--forge-ink-500);
+  border-radius: var(--forge-radius-md);
+  color: var(--forge-slate-100);
+  font-family: var(--forge-font-sans);
+  font-size: 0.9375rem;
+  line-height: 1.4;
+  resize: none;
+}
+
+.chat-input__field:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.chat-input__field::placeholder {
+  color: var(--forge-slate-400);
+}
+
+.chat-input--guidance {
+  justify-content: center;
+  text-align: center;
+  color: var(--forge-slate-400);
+  font-size: 0.875rem;
+  font-style: italic;
+}
