@@ -13,6 +13,7 @@ import {
   createInMemorySessionStore,
 } from './session-store.js';
 import { registerSessionRoutes } from './routes/session.js';
+import type { RefinementLimits } from './refinement-tracker.js';
 import {
   createCostGuard,
   createInMemoryCostGuardStore,
@@ -78,6 +79,8 @@ export interface BuildAppDeps {
   authStore?: AuthStore;
   /** Product/build session persistence (Epic 1.10). Defaults to DB-backed when `db` is available, else in-memory. */
   sessionStore?: SessionStore;
+  /** Refinement round free-tier limits (Epic 2.11). Defaults to env-configured placeholder ceilings. */
+  refinementLimits?: RefinementLimits;
   /** Cost guardrail spend tracking (Epic 0.11). Defaults to in-memory; swap for DB-backed once persisted spend history is needed. */
   costGuardStore?: CostGuardStore;
   /** Full cost guardrail (Epic 0.11). Defaults to one built from env caps + costGuardStore. */
@@ -177,7 +180,11 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
   // in-memory (dev/test) — same convention as the auth store above.
   const sessionStore =
     deps.sessionStore ?? (db ? createDbSessionStore(db) : createInMemorySessionStore());
-  registerSessionRoutes(app, authStore, sessionStore);
+  const refinementLimits: RefinementLimits = deps.refinementLimits ?? {
+    app: env.FREE_APP_REFINEMENT_LIMIT,
+    marketing: env.FREE_MARKETING_REFINEMENT_LIMIT,
+  };
+  registerSessionRoutes(app, authStore, sessionStore, refinementLimits);
 
   // Anthropic Messages API wrapper (Epic 0.9). Only constructed when a key is
   // present so the server still boots without one in dev/test.

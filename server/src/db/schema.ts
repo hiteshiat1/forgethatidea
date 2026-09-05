@@ -56,6 +56,13 @@ export const sessions = pgTable('sessions', {
    */
   chat: jsonb('chat').notNull().default([]),
   cards: jsonb('cards').notNull().default([]),
+  /**
+   * Refinement round counters (Epic 2.11) — app and marketing tracked
+   * independently, since the free-tier limits differ per Epic 9/11's future
+   * pricing model. A "round" is one change-request -> re-emit cycle.
+   */
+  appRefinementRounds: integer('app_refinement_rounds').notNull().default(0),
+  marketingRefinementRounds: integer('marketing_refinement_rounds').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   expiresAt: timestamp('expires_at', { withTimezone: true }),

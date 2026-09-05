@@ -41,6 +41,14 @@ const envSchema = z.object({
   SESSION_COST_CAP_CENTS: z.coerce.number().positive().default(200), // $2.00/session
   USER_DAILY_COST_CAP_CENTS: z.coerce.number().positive().default(1000), // $10.00/user/day
   COST_CAP_WARN_RATIO: z.coerce.number().min(0).max(1).default(0.8), // warn at 80% of cap
+
+  // Refinement round free-tier limits (Epic 2.11). No real entitlement/
+  // billing system exists yet (that's Epic 9/11's job) — these are
+  // placeholder ceilings applied to every session until a real tier system
+  // replaces them. App and marketing tracked independently since a real
+  // pricing model will very likely price them differently.
+  FREE_APP_REFINEMENT_LIMIT: z.coerce.number().int().nonnegative().default(3),
+  FREE_MARKETING_REFINEMENT_LIMIT: z.coerce.number().int().nonnegative().default(3),
 });
 
 export type Env = z.infer<typeof envSchema>;

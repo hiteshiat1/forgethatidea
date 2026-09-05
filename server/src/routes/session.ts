@@ -6,11 +6,16 @@ import { type AuthStore } from '../auth/auth-store.js';
 import { type SessionStore } from '../session-store.js';
 import { transition, IllegalTransitionError, canTransition } from '../phase-machine.js';
 import { checkGate, type SessionCard } from '../phase-gates.js';
+import { recordRefinementRound, type RefinementLimits } from '../refinement-tracker.js';
 
 const updateSchema = z.object({
   phase: z.enum(PHASES).optional(),
   chat: z.array(z.unknown()).optional(),
   cards: z.array(z.unknown()).optional(),
+});
+
+const refineSchema = z.object({
+  kind: z.enum(['app', 'marketing']),
 });
 
 /**
@@ -22,6 +27,7 @@ export function registerSessionRoutes(
   app: FastifyInstance,
   authStore: AuthStore,
   store: SessionStore,
+  refinementLimits: RefinementLimits,
 ) {
   const auth = requireAuth(authStore);
 
@@ -131,6 +137,42 @@ export function registerSessionRoutes(
 
       const gate = checkGate(next, session.cards as SessionCard[]);
       return reply.status(200).send({ next, ...gate });
+    },
+  );
+
+  // Refinement round tracking (Epic 2.11): call once per change-request ->
+  // re-emit cycle. Rejects with 429 once the free-tier limit for that kind
+  // is already reached — the gate signal the UI (#23) reads to disable
+  // further refinement.
+  app.post<{ Params: { id: string } }>(
+    '/api/sessions/:id/refine',
+    { preHandler: auth },
+    async (request, reply) => {
+      const parsed = refineSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: 'validation_failed' });
+      }
+
+      const existing = await store.get(request.params.id);
+      if (!existing || existing.userId !== request.userId) {
+        return reply.status(404).send({ error: 'session_not_found' });
+      }
+
+      const result = await recordRefinementRound(
+        store,
+        request.params.id,
+        parsed.data.kind,
+        refinementLimits,
+      );
+
+      if (!result.ok) {
+        if (result.error === 'session_not_found') {
+          return reply.status(404).send({ error: 'session_not_found' });
+        }
+        return reply.status(429).send(result);
+      }
+
+      return reply.status(200).send(result);
     },
   );
 }
