@@ -29,6 +29,11 @@ const envSchema = z.object({
   // CORS origin for the Vite app in dev/prod.
   WEB_ORIGIN: z.string().default('http://localhost:5173'),
 
+  // Tavily web search (Epic 2.9) — competitor/market research tool. Optional
+  // everywhere: without a key the tool falls back to an "unconfigured"
+  // client that errors clearly rather than the server failing to boot.
+  TAVILY_API_KEY: z.string().optional(),
+
   // Cost guardrails (Epic 0.11). Ceilings in cents to prevent runaway AI
   // spend; soft-warn logs as usage crosses the threshold, hard-stop rejects
   // once the cap is reached. Defaults are conservative placeholders — tune
