@@ -635,3 +635,191 @@ describe('POST /api/sessions/:id/refine', () => {
     expect(res.statusCode).toBe(404);
   });
 });
+
+describe('PATCH /api/sessions/:id/brainstorm', () => {
+  it('merges a single finding and reports the stopping rule as not satisfied', async () => {
+    const { app } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: authCookie },
+    });
+    const sessionId = created.json().id;
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/sessions/${sessionId}/brainstorm`,
+      headers: { cookie: authCookie },
+      payload: { icp: 'independent hairdressers' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      findings: { icp: 'independent hairdressers' },
+      satisfied: false,
+      missing: ['coreJob', 'differentiator'],
+    });
+  });
+
+  it('accumulates findings across multiple calls without wiping prior ones', async () => {
+    const { app } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: authCookie },
+    });
+    const sessionId = created.json().id;
+
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/sessions/${sessionId}/brainstorm`,
+      headers: { cookie: authCookie },
+      payload: { icp: 'independent hairdressers' },
+    });
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/sessions/${sessionId}/brainstorm`,
+      headers: { cookie: authCookie },
+      payload: { coreJob: 'manage bookings without a receptionist' },
+    });
+
+    expect(res.json()).toMatchObject({
+      findings: {
+        icp: 'independent hairdressers',
+        coreJob: 'manage bookings without a receptionist',
+      },
+      satisfied: false,
+      missing: ['differentiator'],
+    });
+  });
+
+  it('reports satisfied once all three findings are captured', async () => {
+    const { app } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: authCookie },
+    });
+    const sessionId = created.json().id;
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/sessions/${sessionId}/brainstorm`,
+      headers: { cookie: authCookie },
+      payload: {
+        icp: 'independent hairdressers',
+        coreJob: 'manage bookings without a receptionist',
+        differentiator: 'built for solo operators, not salons',
+      },
+    });
+
+    expect(res.json()).toMatchObject({ satisfied: true, missing: [] });
+  });
+
+  it('rejects an empty-string finding', async () => {
+    const { app } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: authCookie },
+    });
+    const sessionId = created.json().id;
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/sessions/${sessionId}/brainstorm`,
+      headers: { cookie: authCookie },
+      payload: { icp: '' },
+    });
+
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('404s when the session belongs to a different user', async () => {
+    const { app } = await buildTestApp();
+    const ownerCookie = await signUpAndGetCookie(app);
+    const otherCookie = await signUpAndGetCookie(app);
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: ownerCookie },
+    });
+    const sessionId = created.json().id;
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/sessions/${sessionId}/brainstorm`,
+      headers: { cookie: otherCookie },
+      payload: { icp: 'anyone' },
+    });
+
+    expect(res.statusCode).toBe(404);
+  });
+});
+
+describe('GET /api/sessions/:id/brainstorm', () => {
+  it('returns the current findings and stopping-rule status without mutating anything', async () => {
+    const { app } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: authCookie },
+    });
+    const sessionId = created.json().id;
+
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/sessions/${sessionId}/brainstorm`,
+      headers: { cookie: authCookie },
+      payload: { icp: 'independent hairdressers' },
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/sessions/${sessionId}/brainstorm`,
+      headers: { cookie: authCookie },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      findings: { icp: 'independent hairdressers' },
+      satisfied: false,
+      missing: ['coreJob', 'differentiator'],
+    });
+  });
+
+  it('returns empty findings and full missing list for a fresh session', async () => {
+    const { app } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: authCookie },
+    });
+    const sessionId = created.json().id;
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/sessions/${sessionId}/brainstorm`,
+      headers: { cookie: authCookie },
+    });
+
+    expect(res.json()).toMatchObject({
+      findings: {},
+      satisfied: false,
+      missing: ['icp', 'coreJob', 'differentiator'],
+    });
+  });
+});

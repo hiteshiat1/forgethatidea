@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import type { Phase } from '@forge/shared';
 import type { Database } from './db/client.js';
 import { sessions } from './db/schema.js';
+import type { BrainstormFindings } from './brainstorm-logic.js';
 
 export interface SessionRecord {
   id: string;
@@ -9,6 +10,8 @@ export interface SessionRecord {
   phase: Phase;
   chat: unknown[];
   cards: unknown[];
+  /** Brainstorm phase findings (Epic 2.7) — icp/coreJob/differentiator, captured incrementally. */
+  brainstormFindings: BrainstormFindings;
   /** Refinement round counters (Epic 2.11) — app and marketing tracked independently. */
   appRefinementRounds: number;
   marketingRefinementRounds: number;
@@ -20,6 +23,7 @@ export interface SessionUpdate {
   phase?: Phase;
   chat?: unknown[];
   cards?: unknown[];
+  brainstormFindings?: BrainstormFindings;
   appRefinementRounds?: number;
   marketingRefinementRounds?: number;
 }
@@ -84,6 +88,7 @@ export function createInMemorySessionStore(): SessionStore {
         phase: 'onboarding',
         chat: [],
         cards: [],
+        brainstormFindings: {},
         appRefinementRounds: 0,
         marketingRefinementRounds: 0,
         createdAt: now,

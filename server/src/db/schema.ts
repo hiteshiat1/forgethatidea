@@ -57,6 +57,13 @@ export const sessions = pgTable('sessions', {
   chat: jsonb('chat').notNull().default([]),
   cards: jsonb('cards').notNull().default([]),
   /**
+   * Brainstorm phase findings (Epic 2.7) — icp/coreJob/differentiator,
+   * captured incrementally before enough is known to seed the real build
+   * manifest (#32). See brainstorm-logic.ts for why these live here rather
+   * than on the manifest itself.
+   */
+  brainstormFindings: jsonb('brainstorm_findings').notNull().default({}),
+  /**
    * Refinement round counters (Epic 2.11) — app and marketing tracked
    * independently, since the free-tier limits differ per Epic 9/11's future
    * pricing model. A "round" is one change-request -> re-emit cycle.
