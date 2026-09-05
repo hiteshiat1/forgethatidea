@@ -9,6 +9,7 @@ import {
   CostCapExceededError,
 } from './cost-guard.js';
 import { createInMemorySessionStore } from './session-store.js';
+import type { WebSearchClient } from './web-search.js';
 import type { Database } from './db/client.js';
 
 const testEnv = () => loadEnv({ NODE_ENV: 'test' } as NodeJS.ProcessEnv);
@@ -242,6 +243,33 @@ describe('cost guard decoration', () => {
       spendCents: 100,
       capCents: 100,
     });
+    await app.close();
+  });
+});
+
+describe('web search tool decoration', () => {
+  it('uses a provided webSearchClient', async () => {
+    const client: WebSearchClient = {
+      search: vi.fn(async () => [{ title: 'A', url: 'https://a.example.com', snippet: 'x' }]),
+    };
+    const app = buildApp(testEnv(), { webSearchClient: client });
+
+    const result = await app.webSearchTool.web_search({ query: 'test' });
+    expect(result).toEqual({
+      results: [{ title: 'A', url: 'https://a.example.com', snippet: 'x' }],
+    });
+    expect(client.search).toHaveBeenCalledWith('test');
+    await app.close();
+  });
+
+  it('defaults to an unconfigured client (clear error on use) when no TAVILY_API_KEY is set', async () => {
+    const app = buildApp(testEnv());
+
+    const result = await app.webSearchTool.web_search({ query: 'test' });
+    expect(result).toMatchObject({ error: 'search_failed' });
+    if ('error' in result && result.error === 'search_failed') {
+      expect(result.message).toMatch(/not configured/);
+    }
     await app.close();
   });
 });

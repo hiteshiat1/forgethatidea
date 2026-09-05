@@ -42,6 +42,12 @@ import {
   DEFAULT_FALLBACK_MODEL,
 } from './model-router.js';
 import { createDbClient, type Database } from './db/client.js';
+import {
+  createWebSearchTool,
+  createTavilyWebSearchClient,
+  createUnconfiguredWebSearchClient,
+  type WebSearchClient,
+} from './web-search.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -51,6 +57,7 @@ declare module 'fastify' {
     modelRouter: ReturnType<typeof createModelRouter>;
     db?: Database;
     costGuard: ReturnType<typeof createCostGuard>;
+    webSearchTool: ReturnType<typeof createWebSearchTool>;
   }
 }
 
@@ -75,6 +82,8 @@ export interface BuildAppDeps {
   costGuardStore?: CostGuardStore;
   /** Full cost guardrail (Epic 0.11). Defaults to one built from env caps + costGuardStore. */
   costGuard?: ReturnType<typeof createCostGuard>;
+  /** Web search client (Epic 2.9). Defaults to a real Tavily client keyed by env, or an unconfigured stub. */
+  webSearchClient?: WebSearchClient;
 }
 
 /**
@@ -236,6 +245,18 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
       logger: app.log,
     });
   app.decorate('costGuard', costGuard);
+
+  // Web search / research tool (Epic 2.9): live search for competitor and
+  // market research, cached + rate-limited. Falls back to an unconfigured
+  // stub (clear error on use) when no TAVILY_API_KEY is set, same
+  // boot-without-a-key convention as the AI provider clients above.
+  const webSearchClient =
+    deps.webSearchClient ??
+    (env.TAVILY_API_KEY
+      ? createTavilyWebSearchClient(env.TAVILY_API_KEY)
+      : createUnconfiguredWebSearchClient());
+  const webSearchTool = createWebSearchTool({ client: webSearchClient, logger: app.log });
+  app.decorate('webSearchTool', webSearchTool);
 
   return app;
 }
