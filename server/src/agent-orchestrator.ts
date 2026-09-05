@@ -40,10 +40,29 @@ export interface AgentOrchestratorDeps {
   maxToolRounds?: number;
 }
 
-export type HandleTurnResult =
-  | { ok: true; reply: string }
-  | { ok: false; error: 'session_not_found' }
-  | { ok: false; error: 'cost_cap_exceeded'; reason: string };
+export interface HandleTurnSuccess {
+  ok: true;
+  reply: string;
+}
+
+export interface HandleTurnFailure {
+  ok: false;
+  error: 'session_not_found' | 'cost_cap_exceeded';
+  reason?: string;
+}
+
+export type HandleTurnResult = HandleTurnSuccess | HandleTurnFailure;
+
+/**
+ * Explicit type guard rather than relying on inline `!result.ok` narrowing
+ * of the union — a prior PR (#38's refinement-tracker.ts) hit a Vercel-only
+ * build failure where that inline narrowing didn't hold in Vercel's
+ * (separately-invoked, non-Turbo-cached) tsc pass even though it typechecked
+ * fine locally. This sidesteps the whole class of issue.
+ */
+export function isHandleTurnFailure(result: HandleTurnResult): result is HandleTurnFailure {
+  return result.ok === false;
+}
 
 const DEFAULT_MODEL = 'claude-opus-5';
 const DEFAULT_MAX_TOKENS = 2048;

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { requireAuth } from './auth.js';
 import { type AuthStore } from '../auth/auth-store.js';
 import { type SessionStore } from '../session-store.js';
-import type { createAgentOrchestrator } from '../agent-orchestrator.js';
+import { isHandleTurnFailure, type createAgentOrchestrator } from '../agent-orchestrator.js';
 
 const messageSchema = z.object({
   text: z.string().trim().min(1),
@@ -43,7 +43,7 @@ export function registerAgentRoutes(
         parsed.data.text,
       );
 
-      if (!result.ok) {
+      if (isHandleTurnFailure(result)) {
         if (result.error === 'session_not_found') {
           return reply.status(404).send({ error: 'session_not_found' });
         }
