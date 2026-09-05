@@ -1,0 +1,1 @@
+ALTER TABLE "sessions" ADD COLUMN "sources_intake" jsonb DEFAULT '{"sources":[],"declined":false}'::jsonb NOT NULL;

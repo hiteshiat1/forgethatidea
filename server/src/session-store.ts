@@ -3,6 +3,7 @@ import type { Phase } from '@forge/shared';
 import type { Database } from './db/client.js';
 import { sessions } from './db/schema.js';
 import type { BrainstormFindings } from './brainstorm-logic.js';
+import type { SourcesIntake } from './sources-logic.js';
 
 export interface SessionRecord {
   id: string;
@@ -12,6 +13,8 @@ export interface SessionRecord {
   cards: unknown[];
   /** Brainstorm phase findings (Epic 2.7) — icp/coreJob/differentiator, captured incrementally. */
   brainstormFindings: BrainstormFindings;
+  /** Sources/RAG intake (Epic 2.8) — competitor links/names, or an explicit decline. */
+  sourcesIntake: SourcesIntake;
   /** Refinement round counters (Epic 2.11) — app and marketing tracked independently. */
   appRefinementRounds: number;
   marketingRefinementRounds: number;
@@ -24,6 +27,7 @@ export interface SessionUpdate {
   chat?: unknown[];
   cards?: unknown[];
   brainstormFindings?: BrainstormFindings;
+  sourcesIntake?: SourcesIntake;
   appRefinementRounds?: number;
   marketingRefinementRounds?: number;
 }
@@ -89,6 +93,7 @@ export function createInMemorySessionStore(): SessionStore {
         chat: [],
         cards: [],
         brainstormFindings: {},
+        sourcesIntake: { sources: [], declined: false },
         appRefinementRounds: 0,
         marketingRefinementRounds: 0,
         createdAt: now,

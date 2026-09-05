@@ -64,6 +64,12 @@ export const sessions = pgTable('sessions', {
    */
   brainstormFindings: jsonb('brainstorm_findings').notNull().default({}),
   /**
+   * Sources/RAG intake (Epic 2.8) — competitor names/apps/reference links
+   * the user provides for research, or an explicit decline ("none"). See
+   * sources-logic.ts for why these live here rather than on the manifest.
+   */
+  sourcesIntake: jsonb('sources_intake').notNull().default({ sources: [], declined: false }),
+  /**
    * Refinement round counters (Epic 2.11) — app and marketing tracked
    * independently, since the free-tier limits differ per Epic 9/11's future
    * pricing model. A "round" is one change-request -> re-emit cycle.

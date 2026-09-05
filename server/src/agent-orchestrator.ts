@@ -7,6 +7,7 @@ import type {
 import { buildSystemPrompt } from './system-prompt.js';
 import { createToolDispatcher, type ToolRegistry } from './tool-dispatch.js';
 import { createManifestTools } from './manifest-tools.js';
+import { createSourcesTools } from './sources-tools.js';
 import type { SessionStore } from './session-store.js';
 import type { ManifestStore } from './manifest-store.js';
 import type { createCostGuard } from './cost-guard.js';
@@ -68,7 +69,7 @@ const DEFAULT_MODEL = 'claude-opus-5';
 const DEFAULT_MAX_TOKENS = 2048;
 const DEFAULT_MAX_TOOL_ROUNDS = 5;
 
-const MANIFEST_TOOL_SCHEMAS = {
+const BUILT_IN_TOOL_SCHEMAS = {
   get_manifest: {
     description: 'Read the current build manifest for this session, if one exists yet.',
     inputSchema: { type: 'object', properties: {} },
@@ -81,6 +82,20 @@ const MANIFEST_TOOL_SCHEMAS = {
       properties: { patch: { type: 'object' } },
       required: ['patch'],
     },
+  },
+  record_source: {
+    description:
+      'Record one competitor name, app, or reference link the user mentions during the sources phase.',
+    inputSchema: {
+      type: 'object',
+      properties: { input: { type: 'string' } },
+      required: ['input'],
+    },
+  },
+  decline_sources: {
+    description:
+      'Record that the user has explicitly said they have no competitor/reference sources to share.',
+    inputSchema: { type: 'object', properties: {} },
   },
 } as const;
 
@@ -127,9 +142,12 @@ export function createAgentOrchestrator(deps: AgentOrchestratorDeps) {
     }
 
     const manifestTools = createManifestTools({ store: manifestStore, sessionId });
+    const sourcesTools = createSourcesTools({ store: sessionStore, sessionId });
     const toolRegistry: ToolRegistry = {
       get_manifest: manifestTools.get_manifest,
       update_manifest: manifestTools.update_manifest,
+      record_source: sourcesTools.record_source,
+      decline_sources: sourcesTools.decline_sources,
       ...deps.extraTools,
     };
     const dispatcher = createToolDispatcher({ tools: toolRegistry, logger: silentLogger() });
@@ -143,9 +161,9 @@ export function createAgentOrchestrator(deps: AgentOrchestratorDeps) {
     const tools = Object.keys(toolRegistry).map((name) => ({
       name,
       description:
-        MANIFEST_TOOL_SCHEMAS[name as keyof typeof MANIFEST_TOOL_SCHEMAS]?.description ??
+        BUILT_IN_TOOL_SCHEMAS[name as keyof typeof BUILT_IN_TOOL_SCHEMAS]?.description ??
         `Tool: ${name}`,
-      inputSchema: MANIFEST_TOOL_SCHEMAS[name as keyof typeof MANIFEST_TOOL_SCHEMAS]
+      inputSchema: BUILT_IN_TOOL_SCHEMAS[name as keyof typeof BUILT_IN_TOOL_SCHEMAS]
         ?.inputSchema ?? {
         type: 'object',
       },

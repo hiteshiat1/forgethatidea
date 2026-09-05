@@ -823,3 +823,47 @@ describe('GET /api/sessions/:id/brainstorm', () => {
     });
   });
 });
+
+describe('GET /api/sessions/:id/sources', () => {
+  it('returns empty sources and incomplete status for a fresh session', async () => {
+    const { app } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: authCookie },
+    });
+    const sessionId = created.json().id;
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/sessions/${sessionId}/sources`,
+      headers: { cookie: authCookie },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ sources: [], declined: false, complete: false });
+  });
+
+  it('404s when the session belongs to a different user', async () => {
+    const { app } = await buildTestApp();
+    const ownerCookie = await signUpAndGetCookie(app);
+    const otherCookie = await signUpAndGetCookie(app);
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: ownerCookie },
+    });
+    const sessionId = created.json().id;
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/sessions/${sessionId}/sources`,
+      headers: { cookie: otherCookie },
+    });
+
+    expect(res.statusCode).toBe(404);
+  });
+});

@@ -36,6 +36,13 @@
       "when": 1788636593885,
       "tag": "0004_fast_daredevil",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788645548578,
+      "tag": "0005_icy_skreet",
+      "breakpoints": true
     }
   ]
 }
