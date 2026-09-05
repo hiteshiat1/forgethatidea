@@ -49,6 +49,13 @@ import {
   createUnconfiguredWebSearchClient,
   type WebSearchClient,
 } from './web-search.js';
+import {
+  createDbManifestStore,
+  createInMemoryManifestStore,
+  type ManifestStore,
+} from './manifest-store.js';
+import { createAgentOrchestrator, type OrchestratorAnthropicClient } from './agent-orchestrator.js';
+import { registerAgentRoutes } from './routes/agent.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -87,6 +94,10 @@ export interface BuildAppDeps {
   costGuard?: ReturnType<typeof createCostGuard>;
   /** Web search client (Epic 2.9). Defaults to a real Tavily client keyed by env, or an unconfigured stub. */
   webSearchClient?: WebSearchClient;
+  /** Build manifest persistence (Epic 2.5/2.6). Defaults to DB-backed when `db` is available, else in-memory. */
+  manifestStore?: ManifestStore;
+  /** Anthropic client the agent orchestrator (Epic 2) calls directly — needs the richer tool-calling shape, not the generic model router. Defaults to `anthropicClient` above. */
+  orchestratorAnthropicClient?: OrchestratorAnthropicClient;
 }
 
 /**
@@ -264,6 +275,28 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
       : createUnconfiguredWebSearchClient());
   const webSearchTool = createWebSearchTool({ client: webSearchClient, logger: app.log });
   app.decorate('webSearchTool', webSearchTool);
+
+  // Build manifest persistence (Epic 2.5/2.6). Same DB-backed-else-in-memory
+  // convention as every other store above.
+  const manifestStore =
+    deps.manifestStore ?? (db ? createDbManifestStore(db) : createInMemoryManifestStore());
+
+  // Agent orchestrator (Epic 2): the real conversational loop tying the
+  // system prompt (#30), tool dispatcher (#31), manifest tools (#33), and
+  // cost guardrails (#0.11) together. Talks to Anthropic directly (not
+  // through modelRouter) because it needs the richer tool-calling content
+  // blocks the router's generic streamMessage doesn't expose.
+  const orchestratorAnthropicClient = deps.orchestratorAnthropicClient ?? anthropicClient;
+  if (orchestratorAnthropicClient) {
+    const orchestrator = createAgentOrchestrator({
+      sessionStore,
+      manifestStore,
+      costGuard,
+      anthropicClient: orchestratorAnthropicClient,
+      extraTools: { web_search: webSearchTool.web_search },
+    });
+    registerAgentRoutes(app, authStore, sessionStore, orchestrator);
+  }
 
   return app;
 }
