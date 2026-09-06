@@ -8,6 +8,7 @@ import { ChatPane, type ChatMessage } from './components/ChatPane.js';
 import { Onboarding } from './components/Onboarding.js';
 import { PhaseRail } from './components/PhaseRail.js';
 import { StatusIndicators } from './components/StatusIndicators.js';
+import { applyTurnEvents, type TurnEvent } from './turn-events.js';
 
 type Health = { status: string; env: string } | null;
 
@@ -34,8 +35,22 @@ function HealthIndicator() {
  */
 export function App() {
   const [onboarded, setOnboarded] = useState(false);
-  const [phase] = useState<Phase>('onboarding');
+  const [turnState, setTurnState] = useState({
+    phase: 'onboarding' as Phase,
+    cardIds: [] as string[],
+  });
+  const phase = turnState.phase;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+
+  /**
+   * Applies a turn's ordered events (Epic 2.12) — phase transitions and card
+   * emissions — to local state in order. This is what the real backend call
+   * (once App.tsx has real session/auth wiring) will feed with the
+   * `events` array from POST /api/sessions/:id/message's response.
+   */
+  function handleTurnEvents(events: TurnEvent[]) {
+    setTurnState((prev) => applyTurnEvents(prev, events));
+  }
   // Refinement round state (Epic 2.11) is server-tracked per session; the
   // agent orchestrator (not yet built) is what will actually call
   // POST /api/sessions/:id/refine and feed real counts back here. Starts at
@@ -47,6 +62,12 @@ export function App() {
 
   function handleSend(text: string) {
     setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'user', text }]);
+    // Real session/auth bootstrap doesn't exist in the UI yet (out of scope
+    // for #39 — that's its own integration issue), so there's no real
+    // `events` array to apply here today. This is the exact point where the
+    // POST /api/sessions/:id/message response's `events` field will be
+    // passed to handleTurnEvents once that wiring exists.
+    handleTurnEvents([]);
   }
 
   return (

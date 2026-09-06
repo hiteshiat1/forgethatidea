@@ -346,3 +346,131 @@ describe('agent error recovery & guardrails (#40)', () => {
     expect(result).toHaveProperty('ok');
   });
 });
+
+describe('phase transition events to UI (#39)', () => {
+  it('returns an empty events list when nothing changed this turn', async () => {
+    const anthropicClient = scriptedAnthropicClient([
+      {
+        inputTokens: 1,
+        outputTokens: 1,
+        stopReason: 'end_turn',
+        content: [{ type: 'text', text: 'ok' }],
+      },
+    ]);
+    const deps = buildDeps(anthropicClient);
+    const session = await deps.sessionStore.create('user-1');
+    const orchestrator = createAgentOrchestrator(deps);
+
+    const result = await orchestrator.handleTurn(session.id, 'user-1', 'hello');
+
+    expect(result).toMatchObject({ ok: true, events: [] });
+  });
+
+  it('dispatches transition_phase and reports a phase_changed event', async () => {
+    const anthropicClient = scriptedAnthropicClient([
+      {
+        inputTokens: 10,
+        outputTokens: 5,
+        stopReason: 'tool_use',
+        content: [
+          { type: 'tool_use', id: 'toolu_1', name: 'transition_phase', input: { to: 'sources' } },
+        ],
+      },
+      {
+        inputTokens: 5,
+        outputTokens: 3,
+        stopReason: 'end_turn',
+        content: [{ type: 'text', text: "Great, let's talk sources." }],
+      },
+    ]);
+    const deps = buildDeps(anthropicClient);
+    const session = await deps.sessionStore.create('user-1');
+    const orchestrator = createAgentOrchestrator(deps);
+
+    const result = await orchestrator.handleTurn(
+      session.id,
+      'user-1',
+      "I know enough, let's move on",
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      events: [{ type: 'phase_changed', from: 'onboarding', to: 'sources' }],
+    });
+    const updated = await deps.sessionStore.get(session.id);
+    expect(updated!.phase).toBe('sources');
+  });
+
+  it('does not report an event when transition_phase is rejected (illegal transition)', async () => {
+    const anthropicClient = scriptedAnthropicClient([
+      {
+        inputTokens: 10,
+        outputTokens: 5,
+        stopReason: 'tool_use',
+        content: [
+          { type: 'tool_use', id: 'toolu_1', name: 'transition_phase', input: { to: 'planning' } },
+        ],
+      },
+      {
+        inputTokens: 5,
+        outputTokens: 3,
+        stopReason: 'end_turn',
+        content: [{ type: 'text', text: 'One step at a time.' }],
+      },
+    ]);
+    const deps = buildDeps(anthropicClient);
+    const session = await deps.sessionStore.create('user-1');
+    const orchestrator = createAgentOrchestrator(deps);
+
+    const result = await orchestrator.handleTurn(session.id, 'user-1', 'skip ahead please');
+
+    expect(result).toMatchObject({ ok: true, events: [] });
+    const updated = await deps.sessionStore.get(session.id);
+    expect(updated!.phase).toBe('onboarding');
+  });
+
+  it('preserves event order across multiple tool rounds within one turn', async () => {
+    const anthropicClient = scriptedAnthropicClient([
+      {
+        inputTokens: 10,
+        outputTokens: 5,
+        stopReason: 'tool_use',
+        content: [
+          { type: 'tool_use', id: 'toolu_1', name: 'transition_phase', input: { to: 'sources' } },
+        ],
+      },
+      {
+        inputTokens: 10,
+        outputTokens: 5,
+        stopReason: 'tool_use',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'toolu_2',
+            name: 'transition_phase',
+            input: { to: 'brainstorm' },
+          },
+        ],
+      },
+      {
+        inputTokens: 5,
+        outputTokens: 3,
+        stopReason: 'end_turn',
+        content: [{ type: 'text', text: 'Moved through two phases.' }],
+      },
+    ]);
+    const deps = buildDeps(anthropicClient);
+    const session = await deps.sessionStore.create('user-1');
+    const orchestrator = createAgentOrchestrator(deps);
+
+    const result = await orchestrator.handleTurn(session.id, 'user-1', 'fast-track this session');
+
+    expect(result).toMatchObject({
+      ok: true,
+      events: [
+        { type: 'phase_changed', from: 'onboarding', to: 'sources' },
+        { type: 'phase_changed', from: 'sources', to: 'brainstorm' },
+      ],
+    });
+  });
+});

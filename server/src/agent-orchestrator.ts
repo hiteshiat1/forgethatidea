@@ -8,6 +8,8 @@ import { buildSystemPrompt } from './system-prompt.js';
 import { createToolDispatcher, type ToolRegistry } from './tool-dispatch.js';
 import { createManifestTools } from './manifest-tools.js';
 import { createSourcesTools } from './sources-tools.js';
+import { createPhaseTransitionTool } from './phase-transition-tool.js';
+import type { TurnEvent } from './turn-events.js';
 import type { SessionStore } from './session-store.js';
 import type { ManifestStore } from './manifest-store.js';
 import type { createCostGuard } from './cost-guard.js';
@@ -44,6 +46,14 @@ export interface AgentOrchestratorDeps {
 export interface HandleTurnSuccess {
   ok: true;
   reply: string;
+  /**
+   * Phase/card events that occurred during this turn, in the exact order
+   * they happened — "ordering guaranteed" per #39. Empty when nothing
+   * changed. The client updates the phase rail / renders cards by walking
+   * this list in order, rather than needing a separate streaming
+   * connection (see turn-events.ts for why).
+   */
+  events: TurnEvent[];
 }
 
 export interface HandleTurnFailure {
@@ -109,6 +119,15 @@ const BUILT_IN_TOOL_SCHEMAS = {
       'Record that the user has explicitly said they have no competitor/reference sources to share.',
     inputSchema: { type: 'object', properties: {} },
   },
+  transition_phase: {
+    description:
+      'Advance the session to the next phase once its work is genuinely done. Only a single forward step is ever legal, and later phases (e.g. build) require their gate conditions to already be satisfied.',
+    inputSchema: {
+      type: 'object',
+      properties: { to: { type: 'string' } },
+      required: ['to'],
+    },
+  },
 } as const;
 
 function toAnthropicMessages(chat: ChatMessage[]): AnthropicMessageParam[] {
@@ -153,13 +172,20 @@ export function createAgentOrchestrator(deps: AgentOrchestratorDeps) {
       throw err;
     }
 
+    const events: TurnEvent[] = [];
     const manifestTools = createManifestTools({ store: manifestStore, sessionId });
     const sourcesTools = createSourcesTools({ store: sessionStore, sessionId });
+    const phaseTransitionTool = createPhaseTransitionTool({
+      store: sessionStore,
+      sessionId,
+      onEvent: (event) => events.push(event),
+    });
     const toolRegistry: ToolRegistry = {
       get_manifest: manifestTools.get_manifest,
       update_manifest: manifestTools.update_manifest,
       record_source: sourcesTools.record_source,
       decline_sources: sourcesTools.decline_sources,
+      transition_phase: phaseTransitionTool.transition_phase,
       ...deps.extraTools,
     };
     const dispatcher = createToolDispatcher({ tools: toolRegistry, logger: silentLogger() });
@@ -265,7 +291,7 @@ export function createAgentOrchestrator(deps: AgentOrchestratorDeps) {
     ];
     await sessionStore.update(sessionId, { chat: newChat });
 
-    return { ok: true, reply: finalText };
+    return { ok: true, reply: finalText, events };
   }
 
   return { handleTurn };
