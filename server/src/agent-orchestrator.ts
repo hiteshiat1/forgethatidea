@@ -9,6 +9,7 @@ import { createToolDispatcher, type ToolRegistry } from './tool-dispatch.js';
 import { createManifestTools } from './manifest-tools.js';
 import { createSourcesTools } from './sources-tools.js';
 import { createPhaseTransitionTool } from './phase-transition-tool.js';
+import { compactChatHistory } from './conversation-compaction.js';
 import type { TurnEvent } from './turn-events.js';
 import type { SessionStore } from './session-store.js';
 import type { ManifestStore } from './manifest-store.js';
@@ -41,6 +42,8 @@ export interface AgentOrchestratorDeps {
   extraTools?: ToolRegistry;
   /** Max tool-call round-trips per turn before giving up rather than looping forever on a confused model. */
   maxToolRounds?: number;
+  /** Messages kept verbatim before older ones are compacted into a summary (#37) — see DEFAULT_KEEP_RECENT_MESSAGES. */
+  keepRecentMessages?: number;
 }
 
 export interface HandleTurnSuccess {
@@ -78,6 +81,14 @@ export function isHandleTurnFailure(result: HandleTurnResult): result is HandleT
 const DEFAULT_MODEL = 'claude-opus-5';
 const DEFAULT_MAX_TOKENS = 2048;
 const DEFAULT_MAX_TOOL_ROUNDS = 5;
+/**
+ * How many of the most recent chat messages stay verbatim before older ones
+ * are collapsed into one compaction summary (#37) — keeps both the model
+ * call's context and the persisted session row bounded regardless of how
+ * long a session runs. The manifest, not chat, is authoritative, so this is
+ * free to be lossy about conversational color as long as it stays coherent.
+ */
+const DEFAULT_KEEP_RECENT_MESSAGES = 30;
 /** Consecutive rounds where every tool call in the round errored, before giving up on this turn as "off track". */
 const MAX_CONSECUTIVE_FAILED_ROUNDS = 2;
 
@@ -152,6 +163,7 @@ export function createAgentOrchestrator(deps: AgentOrchestratorDeps) {
   const model = deps.model ?? DEFAULT_MODEL;
   const maxTokens = deps.maxTokens ?? DEFAULT_MAX_TOKENS;
   const maxToolRounds = deps.maxToolRounds ?? DEFAULT_MAX_TOOL_ROUNDS;
+  const keepRecentMessages = deps.keepRecentMessages ?? DEFAULT_KEEP_RECENT_MESSAGES;
 
   async function handleTurn(
     sessionId: string,
@@ -190,9 +202,10 @@ export function createAgentOrchestrator(deps: AgentOrchestratorDeps) {
     };
     const dispatcher = createToolDispatcher({ tools: toolRegistry, logger: silentLogger() });
 
+    const compactedHistory = compactChatHistory(session.chat as ChatMessage[], keepRecentMessages);
     const system = buildSystemPrompt({ phase: session.phase });
     const messages: AnthropicMessageParam[] = [
-      ...toAnthropicMessages(session.chat as ChatMessage[]),
+      ...toAnthropicMessages(compactedHistory),
       { role: 'user', content: userMessage },
     ];
 
@@ -284,11 +297,14 @@ export function createAgentOrchestrator(deps: AgentOrchestratorDeps) {
       await costGuard.recordUsage({ sessionId, userId }, costCents);
     }
 
-    const newChat: ChatMessage[] = [
-      ...(session.chat as ChatMessage[]),
-      { id: randomUUID(), role: 'user', text: userMessage },
-      { id: randomUUID(), role: 'agent', text: finalText },
-    ];
+    const newChat = compactChatHistory(
+      [
+        ...compactedHistory,
+        { id: randomUUID(), role: 'user', text: userMessage },
+        { id: randomUUID(), role: 'agent', text: finalText },
+      ],
+      keepRecentMessages,
+    );
     await sessionStore.update(sessionId, { chat: newChat });
 
     return { ok: true, reply: finalText, events };
