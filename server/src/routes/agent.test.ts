@@ -147,7 +147,7 @@ describe('POST /api/sessions/:id/message', () => {
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ ok: true, reply: 'Hi there!' });
+    expect(res.json()).toEqual({ ok: true, reply: 'Hi there!', events: [] });
     expect(anthropicClient.streamMessage).toHaveBeenCalledTimes(1);
   });
 

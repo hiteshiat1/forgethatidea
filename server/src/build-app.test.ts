@@ -312,7 +312,7 @@ describe('agent orchestrator wiring', () => {
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ ok: true, reply: 'hi back' });
+    expect(res.json()).toEqual({ ok: true, reply: 'hi back', events: [] });
     await app.close();
   });
 
