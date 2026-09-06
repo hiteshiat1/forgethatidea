@@ -9,6 +9,7 @@ import { createToolDispatcher, type ToolRegistry } from './tool-dispatch.js';
 import { createManifestTools } from './manifest-tools.js';
 import { createSourcesTools } from './sources-tools.js';
 import { createPhaseTransitionTool } from './phase-transition-tool.js';
+import { createManifestSummaryTool } from './manifest-summary-tool.js';
 import { compactChatHistory } from './conversation-compaction.js';
 import type { TurnEvent } from './turn-events.js';
 import type { SessionStore } from './session-store.js';
@@ -139,6 +140,11 @@ const BUILT_IN_TOOL_SCHEMAS = {
       required: ['to'],
     },
   },
+  summarize_manifest: {
+    description:
+      'Recap the current build manifest in plain, non-technical language — the idea, entities, screens, key actions, and whether cost/marketing work has started. Use this whenever the user asks what has been decided so far.',
+    inputSchema: { type: 'object', properties: {} },
+  },
 } as const;
 
 function toAnthropicMessages(chat: ChatMessage[]): AnthropicMessageParam[] {
@@ -192,12 +198,18 @@ export function createAgentOrchestrator(deps: AgentOrchestratorDeps) {
       sessionId,
       onEvent: (event) => events.push(event),
     });
+    const manifestSummaryTool = createManifestSummaryTool({
+      sessionStore,
+      manifestStore,
+      sessionId,
+    });
     const toolRegistry: ToolRegistry = {
       get_manifest: manifestTools.get_manifest,
       update_manifest: manifestTools.update_manifest,
       record_source: sourcesTools.record_source,
       decline_sources: sourcesTools.decline_sources,
       transition_phase: phaseTransitionTool.transition_phase,
+      summarize_manifest: manifestSummaryTool.summarize_manifest,
       ...deps.extraTools,
     };
     const dispatcher = createToolDispatcher({ tools: toolRegistry, logger: silentLogger() });

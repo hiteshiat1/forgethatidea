@@ -553,3 +553,48 @@ describe('conversation compaction (#37)', () => {
     expect(sentMessages.length).toBeLessThan(9);
   });
 });
+
+describe('manifest summary tool (#41)', () => {
+  it('dispatches summarize_manifest and returns the plain-language recap as the reply', async () => {
+    const anthropicClient = scriptedAnthropicClient([
+      {
+        inputTokens: 5,
+        outputTokens: 2,
+        stopReason: 'tool_use',
+        content: [{ type: 'tool_use', id: 'toolu_1', name: 'summarize_manifest', input: {} }],
+      },
+      {
+        inputTokens: 5,
+        outputTokens: 3,
+        stopReason: 'end_turn',
+        content: [{ type: 'text', text: 'Here is where things stand.' }],
+      },
+    ]);
+    const deps = buildDeps(anthropicClient);
+    const session = await deps.sessionStore.create('user-1');
+    await deps.manifestStore.save(session.id, {
+      schemaVersion: 1,
+      productName: 'Habit Tracker',
+      icp: 'People building daily habits.',
+      entities: [{ name: 'Habit', fields: [{ name: 'title', type: 'string' }] }],
+      screens: [{ name: 'Dashboard', purpose: 'See habits' }],
+      roles: ['user'],
+      keyActions: ['Mark complete'],
+      branding: { accentColor: '#2E7D32', tone: 'calm' },
+      references: { researchCardIds: [] },
+    });
+    const orchestrator = createAgentOrchestrator(deps);
+
+    const result = await orchestrator.handleTurn(session.id, 'user-1', 'what do we have so far?');
+
+    expect(result).toMatchObject({ ok: true, reply: 'Here is where things stand.' });
+    const secondCallMessages = anthropicClient.messagesReceived[1]!;
+    const toolResultTurn = secondCallMessages.find(
+      (m) =>
+        m.role === 'user' &&
+        Array.isArray(m.content) &&
+        m.content.some((b) => b.type === 'tool_result'),
+    );
+    expect(toolResultTurn).toBeDefined();
+  });
+});
