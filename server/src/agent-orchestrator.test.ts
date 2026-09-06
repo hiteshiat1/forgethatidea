@@ -598,3 +598,133 @@ describe('manifest summary tool (#41)', () => {
     expect(toolResultTurn).toBeDefined();
   });
 });
+
+describe('session analytics events (#42)', () => {
+  it('emits a phase_entered analytics event when transition_phase succeeds', async () => {
+    const anthropicClient = scriptedAnthropicClient([
+      {
+        inputTokens: 10,
+        outputTokens: 5,
+        stopReason: 'tool_use',
+        content: [
+          { type: 'tool_use', id: 'toolu_1', name: 'transition_phase', input: { to: 'sources' } },
+        ],
+      },
+      {
+        inputTokens: 5,
+        outputTokens: 3,
+        stopReason: 'end_turn',
+        content: [{ type: 'text', text: "Let's talk sources." }],
+      },
+    ]);
+    const deps = buildDeps(anthropicClient);
+    const session = await deps.sessionStore.create('user-1');
+    const analyticsLogger = { info: vi.fn() };
+    const orchestrator = createAgentOrchestrator({ ...deps, analyticsLogger });
+
+    await orchestrator.handleTurn(session.id, 'user-1', 'move on');
+
+    expect(analyticsLogger.info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        analytics_event: true,
+        type: 'phase_entered',
+        sessionId: session.id,
+        phase: 'sources',
+      }),
+      'analytics.phase_entered',
+    );
+  });
+
+  it('does not emit a phase_entered event when no transition happens', async () => {
+    const anthropicClient = scriptedAnthropicClient([
+      {
+        inputTokens: 1,
+        outputTokens: 1,
+        stopReason: 'end_turn',
+        content: [{ type: 'text', text: 'ok' }],
+      },
+    ]);
+    const deps = buildDeps(anthropicClient);
+    const session = await deps.sessionStore.create('user-1');
+    const analyticsLogger = { info: vi.fn() };
+    const orchestrator = createAgentOrchestrator({ ...deps, analyticsLogger });
+
+    await orchestrator.handleTurn(session.id, 'user-1', 'hello');
+
+    expect(analyticsLogger.info).not.toHaveBeenCalled();
+  });
+
+  it('never includes chat/user message content in the emitted analytics event', async () => {
+    const anthropicClient = scriptedAnthropicClient([
+      {
+        inputTokens: 10,
+        outputTokens: 5,
+        stopReason: 'tool_use',
+        content: [
+          { type: 'tool_use', id: 'toolu_1', name: 'transition_phase', input: { to: 'sources' } },
+        ],
+      },
+      {
+        inputTokens: 5,
+        outputTokens: 3,
+        stopReason: 'end_turn',
+        content: [{ type: 'text', text: 'reply' }],
+      },
+    ]);
+    const deps = buildDeps(anthropicClient);
+    const session = await deps.sessionStore.create('user-1');
+    const analyticsLogger = { info: vi.fn() };
+    const orchestrator = createAgentOrchestrator({ ...deps, analyticsLogger });
+
+    await orchestrator.handleTurn(session.id, 'user-1', 'this is my secret idea for an app');
+
+    const [payload] = analyticsLogger.info.mock.calls[0]!;
+    expect(JSON.stringify(payload)).not.toContain('secret idea');
+  });
+
+  it('emits a session_converted event when the session reaches the build phase', async () => {
+    const anthropicClient = scriptedAnthropicClient([
+      {
+        inputTokens: 10,
+        outputTokens: 5,
+        stopReason: 'tool_use',
+        content: [
+          { type: 'tool_use', id: 'toolu_1', name: 'transition_phase', input: { to: 'build' } },
+        ],
+      },
+      {
+        inputTokens: 5,
+        outputTokens: 3,
+        stopReason: 'end_turn',
+        content: [{ type: 'text', text: 'Locked in, moving to build.' }],
+      },
+    ]);
+    const deps = buildDeps(anthropicClient);
+    const session = await deps.sessionStore.create('user-1');
+    await deps.sessionStore.update(session.id, {
+      phase: 'refine',
+      cards: [
+        { id: 'c1', type: 'options', status: 'locked' },
+        { id: 'c2', type: 'architecture', status: 'locked' },
+        { id: 'c3', type: 'cost', status: 'locked' },
+        { id: 'c4', type: 'marketing', status: 'locked' },
+      ],
+    });
+    // transition_phase only allows a single forward step; drop the session back one phase
+    // (planning -> build) so this transition is legal while cards stay locked.
+    await deps.sessionStore.update(session.id, { phase: 'planning' });
+    const analyticsLogger = { info: vi.fn() };
+    const orchestrator = createAgentOrchestrator({ ...deps, analyticsLogger });
+
+    await orchestrator.handleTurn(session.id, 'user-1', 'ready to build');
+
+    expect(analyticsLogger.info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        analytics_event: true,
+        type: 'session_converted',
+        sessionId: session.id,
+      }),
+      'analytics.session_converted',
+    );
+  });
+});

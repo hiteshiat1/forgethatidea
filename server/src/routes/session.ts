@@ -13,6 +13,7 @@ import {
 } from '../refinement-tracker.js';
 import { checkBrainstormStoppingRule } from '../brainstorm-logic.js';
 import { checkSourcesIntakeComplete } from '../sources-logic.js';
+import { emitAnalyticsEvent } from '../analytics.js';
 
 const updateSchema = z.object({
   phase: z.enum(PHASES).optional(),
@@ -183,6 +184,14 @@ export function registerSessionRoutes(
         }
         return reply.status(429).send(result);
       }
+
+      emitAnalyticsEvent(request.log, {
+        type: 'refinement_used',
+        sessionId: request.params.id,
+        kind: parsed.data.kind,
+        round: result.rounds,
+        limit: refinementLimits[parsed.data.kind],
+      });
 
       return reply.status(200).send(result);
     },

@@ -11,6 +11,7 @@ import { createSourcesTools } from './sources-tools.js';
 import { createPhaseTransitionTool } from './phase-transition-tool.js';
 import { createManifestSummaryTool } from './manifest-summary-tool.js';
 import { compactChatHistory } from './conversation-compaction.js';
+import { emitAnalyticsEvent, type AnalyticsLogger } from './analytics.js';
 import type { TurnEvent } from './turn-events.js';
 import type { SessionStore } from './session-store.js';
 import type { ManifestStore } from './manifest-store.js';
@@ -45,6 +46,8 @@ export interface AgentOrchestratorDeps {
   maxToolRounds?: number;
   /** Messages kept verbatim before older ones are compacted into a summary (#37) — see DEFAULT_KEEP_RECENT_MESSAGES. */
   keepRecentMessages?: number;
+  /** Session analytics sink (#42) — defaults to a no-op so it's opt-in until build-app.ts wires the real logger. */
+  analyticsLogger?: AnalyticsLogger;
 }
 
 export interface HandleTurnSuccess {
@@ -170,6 +173,7 @@ export function createAgentOrchestrator(deps: AgentOrchestratorDeps) {
   const maxTokens = deps.maxTokens ?? DEFAULT_MAX_TOKENS;
   const maxToolRounds = deps.maxToolRounds ?? DEFAULT_MAX_TOOL_ROUNDS;
   const keepRecentMessages = deps.keepRecentMessages ?? DEFAULT_KEEP_RECENT_MESSAGES;
+  const analyticsLogger = deps.analyticsLogger ?? { info: () => {} };
 
   async function handleTurn(
     sessionId: string,
@@ -196,7 +200,22 @@ export function createAgentOrchestrator(deps: AgentOrchestratorDeps) {
     const phaseTransitionTool = createPhaseTransitionTool({
       store: sessionStore,
       sessionId,
-      onEvent: (event) => events.push(event),
+      onEvent: (event) => {
+        events.push(event);
+        if (event.type === 'phase_changed') {
+          emitAnalyticsEvent(analyticsLogger, {
+            type: 'phase_entered',
+            sessionId,
+            phase: event.to,
+          });
+          // Reaching `build` means the manifest/cost/marketing gate (#29) is
+          // satisfied — the funnel's real "conversion" milestone today, ahead
+          // of any billing/entitlement concept (not yet built).
+          if (event.to === 'build') {
+            emitAnalyticsEvent(analyticsLogger, { type: 'session_converted', sessionId });
+          }
+        }
+      },
     });
     const manifestSummaryTool = createManifestSummaryTool({
       sessionStore,
