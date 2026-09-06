@@ -474,3 +474,82 @@ describe('phase transition events to UI (#39)', () => {
     });
   });
 });
+
+describe('conversation compaction (#37)', () => {
+  it('keeps chat uncompacted while under the keep-recent threshold', async () => {
+    const anthropicClient = scriptedAnthropicClient([
+      {
+        inputTokens: 1,
+        outputTokens: 1,
+        stopReason: 'end_turn',
+        content: [{ type: 'text', text: 'reply' }],
+      },
+    ]);
+    const deps = buildDeps(anthropicClient);
+    const session = await deps.sessionStore.create('user-1');
+    const orchestrator = createAgentOrchestrator({ ...deps, keepRecentMessages: 10 });
+
+    await orchestrator.handleTurn(session.id, 'user-1', 'hi');
+
+    const updated = await deps.sessionStore.get(session.id);
+    expect(updated?.chat).toHaveLength(2);
+  });
+
+  it('compacts older messages once the chat exceeds keepRecentMessages', async () => {
+    const anthropicClient = scriptedAnthropicClient([
+      {
+        inputTokens: 1,
+        outputTokens: 1,
+        stopReason: 'end_turn',
+        content: [{ type: 'text', text: 'reply' }],
+      },
+    ]);
+    const deps = buildDeps(anthropicClient);
+    const session = await deps.sessionStore.create('user-1');
+    await deps.sessionStore.update(session.id, {
+      chat: [
+        { id: 'a', role: 'user', text: 'one' },
+        { id: 'b', role: 'agent', text: 'two' },
+        { id: 'c', role: 'user', text: 'three' },
+        { id: 'd', role: 'agent', text: 'four' },
+      ],
+    });
+    const orchestrator = createAgentOrchestrator({ ...deps, keepRecentMessages: 2 });
+
+    await orchestrator.handleTurn(session.id, 'user-1', 'hi');
+
+    const updated = await deps.sessionStore.get(session.id);
+    const chat = updated?.chat as { id: string; role: string; text: string }[];
+    expect(chat).toHaveLength(3);
+    expect(chat[0]?.id).toBe('compaction-summary');
+    expect(chat[0]?.text.toLowerCase()).toContain('manifest');
+    expect(chat[chat.length - 1]?.text).toBe('reply');
+  });
+
+  it('sends the compacted (not raw) history to the model', async () => {
+    const anthropicClient = scriptedAnthropicClient([
+      {
+        inputTokens: 1,
+        outputTokens: 1,
+        stopReason: 'end_turn',
+        content: [{ type: 'text', text: 'reply' }],
+      },
+    ]);
+    const deps = buildDeps(anthropicClient);
+    const session = await deps.sessionStore.create('user-1');
+    await deps.sessionStore.update(session.id, {
+      chat: Array.from({ length: 8 }, (_, i) => ({
+        id: `m${i}`,
+        role: i % 2 === 0 ? 'user' : 'agent',
+        text: `msg ${i}`,
+      })),
+    });
+    const orchestrator = createAgentOrchestrator({ ...deps, keepRecentMessages: 2 });
+
+    await orchestrator.handleTurn(session.id, 'user-1', 'hi');
+
+    const sentMessages = anthropicClient.messagesReceived[0]!;
+    // system history (compacted) + the new user message
+    expect(sentMessages.length).toBeLessThan(9);
+  });
+});
