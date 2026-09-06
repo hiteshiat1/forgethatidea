@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import { registerAuthRoutes } from './auth.js';
@@ -590,6 +590,38 @@ describe('POST /api/sessions/:id/refine', () => {
 
     expect(res.statusCode).toBe(429);
     expect(res.json()).toMatchObject({ error: 'refinement_limit_reached', kind: 'app', rounds: 3 });
+  });
+
+  it('emits a refinement_used analytics event on success (#42)', async () => {
+    const { app } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+    const infoSpy = vi.spyOn(app.log, 'info');
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: authCookie },
+    });
+    const sessionId = created.json().id;
+
+    await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${sessionId}/refine`,
+      headers: { cookie: authCookie },
+      payload: { kind: 'app' },
+    });
+
+    expect(infoSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        analytics_event: true,
+        type: 'refinement_used',
+        sessionId,
+        kind: 'app',
+        round: 1,
+        limit: 3,
+      }),
+      'analytics.refinement_used',
+    );
   });
 
   it('rejects an invalid kind', async () => {

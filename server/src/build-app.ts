@@ -294,6 +294,7 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
       costGuard,
       anthropicClient: orchestratorAnthropicClient,
       extraTools: { web_search: webSearchTool.web_search },
+      analyticsLogger: app.log,
     });
     registerAgentRoutes(app, authStore, sessionStore, orchestrator);
   }
