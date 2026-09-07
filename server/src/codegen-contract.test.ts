@@ -75,6 +75,15 @@ describe('buildCodegenPrompt (#63)', () => {
     expect(prompt).toContain(archetype.outOfScope[0]);
   });
 
+  it('embeds branding injection with a derived palette (#72)', () => {
+    const prompt = buildCodegenPrompt({
+      manifest: manifest(),
+      archetype: ARCHETYPES['crud-tracker'],
+    });
+    expect(prompt.toLowerCase()).toContain('habitloop');
+    expect(prompt.toLowerCase()).toContain('forge design tokens');
+  });
+
   it('embeds the standardized mock auth pattern (#70)', () => {
     const prompt = buildCodegenPrompt({
       manifest: manifest(),
