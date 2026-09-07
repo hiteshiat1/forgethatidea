@@ -27,6 +27,13 @@ export interface SessionRecord {
    * completed build was generated from.
    */
   frozenManifestVersion: number | null;
+  /**
+   * Which `app`-type artifact version (Epic 4.13) is currently active/shown
+   * — set on every successful build, and independently movable by a revert
+   * without deleting or reordering any artifact row. `null` until a build
+   * has ever succeeded.
+   */
+  activeAppVersion: number | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -40,6 +47,7 @@ export interface SessionUpdate {
   appRefinementRounds?: number;
   marketingRefinementRounds?: number;
   frozenManifestVersion?: number | null;
+  activeAppVersion?: number | null;
 }
 
 /**
@@ -107,6 +115,7 @@ export function createInMemorySessionStore(): SessionStore {
         appRefinementRounds: 0,
         marketingRefinementRounds: 0,
         frozenManifestVersion: null,
+        activeAppVersion: null,
         createdAt: now,
         updatedAt: now,
       };
