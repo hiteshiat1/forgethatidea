@@ -1,0 +1,43 @@
+/* Minimal auth UI (Epic 0.8 frontend counterpart). */
+
+.auth-gate {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--forge-space-6);
+  padding: var(--forge-space-8);
+}
+
+.auth-gate__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--forge-space-3);
+  max-width: 360px;
+}
+
+.auth-gate__input {
+  padding: var(--forge-space-3);
+  border-radius: var(--forge-radius-sm);
+  border: 1px solid var(--forge-slate-200);
+  background: var(--forge-ink-800);
+  color: var(--forge-slate-100);
+  font-size: 1rem;
+}
+
+.auth-gate__error {
+  margin: 0;
+  color: var(--forge-danger);
+  font-size: 0.9rem;
+}
+
+.auth-gate__switch {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  color: var(--forge-slate-300);
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0;
+}

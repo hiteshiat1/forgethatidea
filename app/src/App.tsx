@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import { type Phase } from '@forge/shared';
 import { Pill } from '@forge/shared/ui';
 import { AppShell } from './components/AppShell.js';
+import { AppRenderer } from './components/AppRenderer.js';
+import { AuthGate } from './components/AuthGate.js';
+import { BuildProgress, type BuildStage } from './components/BuildProgress.js';
 import { CanvasPane } from './components/CanvasPane.js';
 import { ChatInput } from './components/ChatInput.js';
 import { ChatPane, type ChatMessage } from './components/ChatPane.js';
@@ -9,6 +12,13 @@ import { Onboarding } from './components/Onboarding.js';
 import { PhaseRail } from './components/PhaseRail.js';
 import { StatusIndicators } from './components/StatusIndicators.js';
 import { applyTurnEvents, type TurnEvent } from './turn-events.js';
+import {
+  getLatestSession,
+  createSession,
+  triggerBuild,
+  type AuthUser,
+  type ApiSession,
+} from './api.js';
 
 type Health = { status: string; env: string } | null;
 
@@ -29,24 +39,152 @@ function HealthIndicator() {
   return <Pill tone={tone}>{label}</Pill>;
 }
 
+type SessionBootstrapState =
+  | { status: 'checking' }
+  | { status: 'unauthenticated' }
+  | { status: 'ready'; session: ApiSession };
+
+/**
+ * Session bootstrap (Epic 0.8/1.10 frontend counterpart, previously
+ * nonexistent): on load, checks for an authenticated session via the real
+ * httpOnly cookie the backend already issues. Anonymous -> AuthGate; once
+ * authenticated, resumes the user's latest session or creates a new one.
+ * Deliberately minimal — no session-switching UI, no multi-session list —
+ * just enough for the rest of the app (the build route, #75) to have a
+ * real session to act on.
+ */
+function useSessionBootstrap() {
+  const [state, setState] = useState<SessionBootstrapState>({ status: 'checking' });
+
+  async function resumeOrCreateSession() {
+    const latest = await getLatestSession();
+    if (latest.ok && latest.data) {
+      setState({ status: 'ready', session: latest.data });
+      return;
+    }
+    if (!latest.ok && latest.error.error !== 'unauthenticated') {
+      // Any error other than "not signed in" still means we have no session
+      // to act on, but leaves state as-is rather than guessing — surfaced
+      // via the unauthenticated view's own retry (sign in again).
+      setState({ status: 'unauthenticated' });
+      return;
+    }
+    if (!latest.ok) {
+      setState({ status: 'unauthenticated' });
+      return;
+    }
+
+    const created = await createSession();
+    if (created.ok) {
+      setState({ status: 'ready', session: created.data });
+    } else {
+      setState({ status: 'unauthenticated' });
+    }
+  }
+
+  useEffect(() => {
+    resumeOrCreateSession();
+  }, []);
+
+  function handleAuthenticated(_user: AuthUser) {
+    setState({ status: 'checking' });
+    resumeOrCreateSession();
+  }
+
+  return { state, handleAuthenticated };
+}
+
+/**
+ * Build trigger + progress + preview (Epic 4, wiring the generation
+ * pipeline into the browser for the first time): once a session has
+ * reached the `build` phase, the manifest is already frozen (#61) and a
+ * build can be requested. Shows BuildProgress (#73) while in flight and
+ * AppRenderer (#68) once code comes back.
+ */
+function BuildPanel({ sessionId }: { sessionId: string }) {
+  const [stage, setStage] = useState<BuildStage>('compiling');
+  const [error, setError] = useState<string | undefined>(undefined);
+  const [code, setCode] = useState<string | null>(null);
+  const [building, setBuilding] = useState(false);
+
+  async function runBuild() {
+    setBuilding(true);
+    setError(undefined);
+    setCode(null);
+    setStage('compiling');
+
+    // The build route (#75) runs synchronously end to end server-side —
+    // there's no intermediate progress event stream yet (that's #73's own
+    // follow-up once streaming exists), so the stages advance optimistically
+    // while the single request is in flight rather than sitting on
+    // "compiling" for the whole duration.
+    setStage('generating');
+    const result = await triggerBuild(sessionId);
+    setBuilding(false);
+
+    if (!result.ok) {
+      setStage('validating');
+      setError(result.reason ?? result.error);
+      return;
+    }
+
+    setStage('rendering');
+    setCode(result.code);
+    setStage('done');
+  }
+
+  if (code) {
+    return <AppRenderer code={code} />;
+  }
+
+  if (building || error) {
+    return <BuildProgress stage={stage} error={error} onRetry={runBuild} />;
+  }
+
+  return (
+    <div style={{ padding: 'var(--forge-space-6)' }}>
+      <p style={{ color: 'var(--forge-slate-300)', marginBottom: 'var(--forge-space-4)' }}>
+        Your plan is locked in — ready to build your prototype.
+      </p>
+      <button
+        type="button"
+        onClick={runBuild}
+        style={{
+          padding: 'var(--forge-space-3) var(--forge-space-6)',
+          borderRadius: 'var(--forge-radius-md)',
+          border: 'none',
+          background: 'var(--forge-signal-amber)',
+          color: 'var(--forge-ink-900)',
+          fontWeight: 600,
+          cursor: 'pointer',
+        }}
+      >
+        Build my app
+      </button>
+    </div>
+  );
+}
+
 /**
  * App root. Renders the two-pane shell (Epic 1.1); the chat and canvas panes are
  * placeholders that later Epic 1 issues fill in.
  */
 export function App() {
+  const { state: sessionState, handleAuthenticated } = useSessionBootstrap();
   const [onboarded, setOnboarded] = useState(false);
   const [turnState, setTurnState] = useState({
     phase: 'onboarding' as Phase,
     cardIds: [] as string[],
   });
-  const phase = turnState.phase;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+
+  const phase = sessionState.status === 'ready' ? sessionState.session.phase : turnState.phase;
 
   /**
    * Applies a turn's ordered events (Epic 2.12) — phase transitions and card
-   * emissions — to local state in order. This is what the real backend call
-   * (once App.tsx has real session/auth wiring) will feed with the
-   * `events` array from POST /api/sessions/:id/message's response.
+   * emissions — to local state in order. Chat message sending itself is
+   * still the #39-scoped placeholder below; only the build phase's own
+   * flow (BuildPanel) talks to the real backend so far.
    */
   function handleTurnEvents(events: TurnEvent[]) {
     setTurnState((prev) => applyTurnEvents(prev, events));
@@ -62,13 +200,24 @@ export function App() {
 
   function handleSend(text: string) {
     setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'user', text }]);
-    // Real session/auth bootstrap doesn't exist in the UI yet (out of scope
-    // for #39 — that's its own integration issue), so there's no real
-    // `events` array to apply here today. This is the exact point where the
-    // POST /api/sessions/:id/message response's `events` field will be
-    // passed to handleTurnEvents once that wiring exists.
+    // Real chat-message wiring (POST /api/sessions/:id/message) is still out
+    // of scope here — this session's work wired the build route (#75) and
+    // auth/session bootstrap only, not full conversational wiring. This is
+    // the exact point where the response's `events` field will be passed to
+    // handleTurnEvents once that wiring exists.
     handleTurnEvents([]);
   }
+
+  if (sessionState.status === 'checking') {
+    return null;
+  }
+
+  if (sessionState.status === 'unauthenticated') {
+    return <AuthGate onAuthenticated={handleAuthenticated} />;
+  }
+
+  const sessionId = sessionState.session.id;
+  const readyToBuild = phase === 'build' || phase === 'refine';
 
   return (
     <AppShell
@@ -89,7 +238,15 @@ export function App() {
           <ChatInput phase={phase} onSend={handleSend} />
         </div>
       }
-      canvas={onboarded ? <CanvasPane /> : <Onboarding onComplete={() => setOnboarded(true)} />}
+      canvas={
+        readyToBuild ? (
+          <BuildPanel sessionId={sessionId} />
+        ) : onboarded ? (
+          <CanvasPane />
+        ) : (
+          <Onboarding onComplete={() => setOnboarded(true)} />
+        )
+      }
     />
   );
 }
