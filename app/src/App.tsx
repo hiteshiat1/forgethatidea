@@ -135,7 +135,22 @@ function BuildPanel({ sessionId }: { sessionId: string }) {
   }
 
   if (code) {
-    return <AppRenderer code={code} />;
+    return (
+      <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ padding: 'var(--forge-space-2) var(--forge-space-4)' }}>
+          <a
+            href={`/api/sessions/${sessionId}/export`}
+            download
+            style={{ color: 'var(--forge-signal-amber)', fontSize: '0.9rem' }}
+          >
+            Download as .jsx
+          </a>
+        </div>
+        <div style={{ flex: 1, minHeight: 0 }}>
+          <AppRenderer code={code} />
+        </div>
+      </div>
+    );
   }
 
   if (building || error) {

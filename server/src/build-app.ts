@@ -62,6 +62,7 @@ import {
 } from './artifact-store.js';
 import { createBuildOrchestrator } from './build-orchestrator.js';
 import { registerBuildRoutes } from './routes/build.js';
+import { registerExportRoutes } from './routes/export.js';
 import { registerAgentRoutes } from './routes/agent.js';
 
 declare module 'fastify' {
@@ -327,6 +328,12 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
     });
     registerBuildRoutes(app, authStore, sessionStore, buildOrchestrator);
   }
+
+  // App export (Epic 4.14): downloads the session's active build. Registered
+  // unconditionally, unlike the build route — exporting an already-built
+  // artifact needs no model call, so it doesn't depend on an Anthropic
+  // client being configured.
+  registerExportRoutes(app, authStore, sessionStore, manifestStore, artifactStore, app.log);
 
   return app;
 }

@@ -33,7 +33,18 @@ export interface SessionConvertedEvent {
   sessionId: string;
 }
 
-export type AnalyticsEvent = PhaseEnteredEvent | RefinementUsedEvent | SessionConvertedEvent;
+export interface AppExportedEvent {
+  type: 'app_exported';
+  sessionId: string;
+  /** The artifact version exported (Epic 4.13/4.14) — lets export rate be tracked per build attempt, not just per session. */
+  version: number;
+}
+
+export type AnalyticsEvent =
+  | PhaseEnteredEvent
+  | RefinementUsedEvent
+  | SessionConvertedEvent
+  | AppExportedEvent;
 
 export interface AnalyticsLogger {
   info(obj: Record<string, unknown>, msg?: string): void;
