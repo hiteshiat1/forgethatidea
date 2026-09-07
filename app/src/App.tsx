@@ -16,6 +16,7 @@ import {
   getLatestSession,
   createSession,
   triggerBuild,
+  sendMessage,
   type AuthUser,
   type ApiSession,
 } from './api.js';
@@ -177,14 +178,23 @@ export function App() {
     cardIds: [] as string[],
   });
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [sending, setSending] = useState(false);
 
-  const phase = sessionState.status === 'ready' ? sessionState.session.phase : turnState.phase;
+  // Seed turnState.phase from the real session exactly once it becomes
+  // available, then let handleTurnEvents (below, driven by real message
+  // responses) own it from there — never read session.phase directly for
+  // rendering, since that would go stale the instant a turn changes phase
+  // without a full session refetch.
+  const [phaseSeeded, setPhaseSeeded] = useState(false);
+  if (sessionState.status === 'ready' && !phaseSeeded) {
+    setPhaseSeeded(true);
+    setTurnState((prev) => ({ ...prev, phase: sessionState.session.phase }));
+  }
+  const phase = turnState.phase;
 
   /**
    * Applies a turn's ordered events (Epic 2.12) — phase transitions and card
-   * emissions — to local state in order. Chat message sending itself is
-   * still the #39-scoped placeholder below; only the build phase's own
-   * flow (BuildPanel) talks to the real backend so far.
+   * emissions — to local state in order, in the exact sequence they occurred.
    */
   function handleTurnEvents(events: TurnEvent[]) {
     setTurnState((prev) => applyTurnEvents(prev, events));
@@ -198,14 +208,33 @@ export function App() {
     marketing: { rounds: 0, limit: 3 },
   });
 
-  function handleSend(text: string) {
+  async function handleSend(text: string) {
+    if (sessionState.status !== 'ready') return;
+    const sessionId = sessionState.session.id;
+
     setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'user', text }]);
-    // Real chat-message wiring (POST /api/sessions/:id/message) is still out
-    // of scope here — this session's work wired the build route (#75) and
-    // auth/session bootstrap only, not full conversational wiring. This is
-    // the exact point where the response's `events` field will be passed to
-    // handleTurnEvents once that wiring exists.
-    handleTurnEvents([]);
+    setSending(true);
+
+    const result = await sendMessage(sessionId, text);
+
+    setSending(false);
+    if (!result.ok) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: 'agent',
+          text: "I ran into trouble sending that — let's try again.",
+        },
+      ]);
+      return;
+    }
+
+    setMessages((prev) => [
+      ...prev,
+      { id: crypto.randomUUID(), role: 'agent', text: result.reply },
+    ]);
+    handleTurnEvents(result.events);
   }
 
   if (sessionState.status === 'checking') {
@@ -235,7 +264,7 @@ export function App() {
       chat={
         <div className="chat-column">
           <ChatPane messages={messages} />
-          <ChatInput phase={phase} onSend={handleSend} />
+          <ChatInput phase={phase} onSend={handleSend} disabled={sending} />
         </div>
       }
       canvas={
