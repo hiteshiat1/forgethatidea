@@ -83,6 +83,14 @@ export const sessions = pgTable('sessions', {
    * what an in-flight or completed build was generated from.
    */
   frozenManifestVersion: integer('frozen_manifest_version'),
+  /**
+   * Which `app`-type artifact version (artifacts.version, scoped to this
+   * session) is the one currently shown/exported (Epic 4.13) — set on every
+   * successful build and movable independently by a revert, so "revert to a
+   * previous build" only repoints this rather than deleting or reordering
+   * any artifact row. Null until a build has ever succeeded.
+   */
+  activeAppVersion: integer('active_app_version'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   expiresAt: timestamp('expires_at', { withTimezone: true }),
@@ -114,7 +122,17 @@ export const artifacts = pgTable('artifacts', {
     .references(() => sessions.id, { onDelete: 'cascade' }),
   manifestId: uuid('manifest_id').references(() => manifests.id, { onDelete: 'set null' }),
   type: artifactTypeEnum('type').notNull(),
-  /** Where the artifact content lives — object storage key, not the content itself. */
-  storageKey: text('storage_key').notNull(),
+  /** Monotonically increasing per (sessionId, type) — every build is a new, immutable version, never an update-in-place (Epic 4.13). */
+  version: integer('version').notNull().default(1),
+  /**
+   * The artifact payload itself (e.g. generated app source code for `app`
+   * type) — stored directly for now rather than in real object storage,
+   * since no object-storage integration exists yet in this codebase.
+   * `storageKey` stays as the seam a future migration to real blob storage
+   * plugs into without changing this table's shape.
+   */
+  content: jsonb('content'),
+  /** Where the artifact content lives in object storage, once that exists — nullable until then. */
+  storageKey: text('storage_key'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
