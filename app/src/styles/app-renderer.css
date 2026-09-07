@@ -1,0 +1,48 @@
+/* Sandboxed app renderer (Epic 4.7). */
+
+.app-renderer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--forge-space-2);
+  height: 100%;
+}
+
+.app-renderer__toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.app-renderer__toggle {
+  padding: var(--forge-space-1) var(--forge-space-3);
+  border-radius: var(--forge-radius-sm);
+  border: 1px solid var(--forge-slate-200);
+  background: transparent;
+  color: var(--forge-slate-100);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.app-renderer__toggle:hover {
+  background: var(--forge-ink-700);
+}
+
+.app-renderer__frame {
+  flex: 1;
+  width: 100%;
+  min-height: 320px;
+  border: 1px solid var(--forge-slate-200);
+  border-radius: var(--forge-radius-md);
+  background: white;
+}
+
+.app-renderer--fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: var(--forge-ink-900);
+  padding: var(--forge-space-4);
+}
+
+.app-renderer--fullscreen .app-renderer__frame {
+  min-height: 0;
+}
