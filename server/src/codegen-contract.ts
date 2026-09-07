@@ -1,6 +1,7 @@
 import type { BuildManifest } from '@forge/shared';
 import type { ArchetypeDefinition } from './archetype-catalog.js';
 import { buildMockAuthPattern } from './mock-auth-pattern.js';
+import { buildMockCrudStorePattern } from './mock-crud-store-pattern.js';
 
 /**
  * Generator prompt & output contract (Epic 4.2). Two halves of the same
@@ -13,7 +14,7 @@ import { buildMockAuthPattern } from './mock-auth-pattern.js';
  * whenever either half changes in a way that could affect generated output,
  * matching the SYSTEM_PROMPT_VERSION convention in system-prompt.ts.
  */
-export const CODEGEN_CONTRACT_VERSION = '2026-09-07.2';
+export const CODEGEN_CONTRACT_VERSION = '2026-09-07.3';
 
 export interface CodegenPromptInput {
   manifest: BuildManifest;
@@ -61,6 +62,8 @@ Output contract (non-negotiable — violations are checked programmatically and 
 - Style using the Forge design tokens (--forge-* CSS custom properties) rather than inventing colors, spacing, or fonts from scratch.
 
 ${buildMockAuthPattern(manifest.roles)}
+
+${buildMockCrudStorePattern(manifest.entities)}
 
 Out of scope for this archetype in v1 — do not attempt:
 ${archetype.outOfScope.map((item) => `- ${item}`).join('\n')}

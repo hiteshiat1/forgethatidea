@@ -92,6 +92,15 @@ describe('buildCodegenPrompt (#63)', () => {
     expect(prompt.toLowerCase()).toContain('switch role');
   });
 
+  it('embeds the standardized mock CRUD store pattern (#71)', () => {
+    const prompt = buildCodegenPrompt({
+      manifest: manifest(),
+      archetype: ARCHETYPES['crud-tracker'],
+    });
+    expect(prompt.toLowerCase()).toContain('mock crud store pattern');
+    expect(prompt.toLowerCase()).toContain('usereducer');
+  });
+
   it('requires seed data realistic and relevant to the ICP', () => {
     const prompt = buildCodegenPrompt({
       manifest: manifest(),
