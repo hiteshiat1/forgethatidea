@@ -48,6 +48,17 @@ describe('emitAnalyticsEvent (#42)', () => {
     );
   });
 
+  it('logs an app_exported event with the exported version', () => {
+    const logger = { info: vi.fn() };
+
+    emitAnalyticsEvent(logger, { type: 'app_exported', sessionId: 'session-1', version: 3 });
+
+    expect(logger.info).toHaveBeenCalledWith(
+      { analytics_event: true, type: 'app_exported', sessionId: 'session-1', version: 3 },
+      'analytics.app_exported',
+    );
+  });
+
   it('never includes anything beyond sessionId, event-specific structural fields, and the type', () => {
     const logger = { info: vi.fn() };
 

@@ -406,6 +406,39 @@ describe('build orchestrator wiring', () => {
   });
 });
 
+describe('export route wiring', () => {
+  it('registers the export route regardless of anthropic client configuration', async () => {
+    const app = buildApp(testEnv());
+
+    const signupRes = await app.inject({
+      method: 'POST',
+      url: '/api/auth/signup',
+      payload: { email: 'export-wired@example.com', password: 'correct horse battery staple' },
+    });
+    const setCookie = signupRes.headers['set-cookie'];
+    const authCookie = String(Array.isArray(setCookie) ? setCookie[0] : setCookie).split(';')[0]!;
+
+    const sessionRes = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: authCookie },
+    });
+    const sessionId = sessionRes.json().id;
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/sessions/${sessionId}/export`,
+      headers: { cookie: authCookie },
+    });
+
+    // No build yet in this test — route is registered and reachable
+    // (proven by a typed 409, not a 404 route-not-found).
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toEqual({ ok: false, error: 'no_build_to_export' });
+    await app.close();
+  });
+});
+
 describe('health check', () => {
   it('returns ok', async () => {
     const app = buildApp(testEnv());
