@@ -1,4 +1,5 @@
 import type { Phase } from '@forge/shared';
+import type { TurnEvent } from './turn-events.js';
 
 /**
  * Typed fetch wrappers for the real backend (Epic 0.8/1.10/4). Every call
@@ -74,6 +75,32 @@ export async function triggerBuild(sessionId: string): Promise<BuildResponse> {
   const res = await fetch(`/api/sessions/${sessionId}/build`, {
     method: 'POST',
     credentials: 'include',
+  });
+  return res.json();
+}
+
+export interface SendMessageSuccess {
+  ok: true;
+  reply: string;
+  events: TurnEvent[];
+}
+
+export type SendMessageResponse =
+  | SendMessageSuccess
+  | { ok: false; error: string; reason?: string };
+
+/**
+ * Sends one chat turn (Epic 2's agent orchestrator, #34) and returns the
+ * agent's reply plus the ordered phase/card events from that turn (#39) —
+ * the real counterpart to App.tsx's previous handleSend/handleTurnEvents([])
+ * placeholder.
+ */
+export async function sendMessage(sessionId: string, text: string): Promise<SendMessageResponse> {
+  const res = await fetch(`/api/sessions/${sessionId}/message`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
   });
   return res.json();
 }
