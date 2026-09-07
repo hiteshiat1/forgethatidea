@@ -1,5 +1,6 @@
 import type { BuildManifest } from '@forge/shared';
 import type { ArchetypeDefinition } from './archetype-catalog.js';
+import { buildMockAuthPattern } from './mock-auth-pattern.js';
 
 /**
  * Generator prompt & output contract (Epic 4.2). Two halves of the same
@@ -12,7 +13,7 @@ import type { ArchetypeDefinition } from './archetype-catalog.js';
  * whenever either half changes in a way that could affect generated output,
  * matching the SYSTEM_PROMPT_VERSION convention in system-prompt.ts.
  */
-export const CODEGEN_CONTRACT_VERSION = '2026-09-07.1';
+export const CODEGEN_CONTRACT_VERSION = '2026-09-07.2';
 
 export interface CodegenPromptInput {
   manifest: BuildManifest;
@@ -58,6 +59,8 @@ Output contract (non-negotiable — violations are checked programmatically and 
 - Never render a real HTML <form> tag (no native form submission semantics). Build inputs as plain controlled elements (input/button/onClick) instead.
 - Seed data must be realistic and relevant to the ICP ("${manifest.icp}") — not generic placeholder text like "Item 1", "Item 2".
 - Style using the Forge design tokens (--forge-* CSS custom properties) rather than inventing colors, spacing, or fonts from scratch.
+
+${buildMockAuthPattern(manifest.roles)}
 
 Out of scope for this archetype in v1 — do not attempt:
 ${archetype.outOfScope.map((item) => `- ${item}`).join('\n')}
