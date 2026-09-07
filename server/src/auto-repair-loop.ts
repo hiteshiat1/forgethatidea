@@ -3,7 +3,7 @@ import {
   isGenerationFailure,
   type GenerationAnthropicClient,
 } from './generation-pipeline.js';
-import { validateGeneratedCode } from './generation-validation.js';
+import { validateGeneratedCode, isValidationFailure } from './generation-validation.js';
 import type { GenerationSpec } from './generation-spec.js';
 
 const DEFAULT_MAX_REPAIR_ROUNDS = 2;
@@ -84,7 +84,7 @@ export async function runAutoRepairLoop(input: AutoRepairLoopInput): Promise<Aut
     }
 
     const validation = await validateGeneratedCode(generation.code);
-    if (validation.ok) {
+    if (!isValidationFailure(validation)) {
       return {
         ok: true,
         code: generation.code,
