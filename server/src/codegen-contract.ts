@@ -2,6 +2,7 @@ import type { BuildManifest } from '@forge/shared';
 import type { ArchetypeDefinition } from './archetype-catalog.js';
 import { buildMockAuthPattern } from './mock-auth-pattern.js';
 import { buildMockCrudStorePattern } from './mock-crud-store-pattern.js';
+import { buildBrandingInjectionPattern } from './branding-injection.js';
 
 /**
  * Generator prompt & output contract (Epic 4.2). Two halves of the same
@@ -14,7 +15,7 @@ import { buildMockCrudStorePattern } from './mock-crud-store-pattern.js';
  * whenever either half changes in a way that could affect generated output,
  * matching the SYSTEM_PROMPT_VERSION convention in system-prompt.ts.
  */
-export const CODEGEN_CONTRACT_VERSION = '2026-09-07.3';
+export const CODEGEN_CONTRACT_VERSION = '2026-09-07.4';
 
 export interface CodegenPromptInput {
   manifest: BuildManifest;
@@ -51,7 +52,6 @@ ${screensBlock}
 
 Roles: ${manifest.roles.join(', ')}
 Key actions: ${manifest.keyActions.join(', ')}
-Branding: accent color ${manifest.branding.accentColor}, tone "${manifest.branding.tone}"
 
 Output contract (non-negotiable — violations are checked programmatically and route to auto-repair):
 - A single self-contained React file. One default export, one top-level component. No other files, no imports beyond React itself and the design tokens.
@@ -59,7 +59,8 @@ Output contract (non-negotiable — violations are checked programmatically and 
 - Never call fetch, XMLHttpRequest, or any other network API. Auth, database, and CRUD operations are all mocked entirely in-memory — no real backend exists.
 - Never render a real HTML <form> tag (no native form submission semantics). Build inputs as plain controlled elements (input/button/onClick) instead.
 - Seed data must be realistic and relevant to the ICP ("${manifest.icp}") — not generic placeholder text like "Item 1", "Item 2".
-- Style using the Forge design tokens (--forge-* CSS custom properties) rather than inventing colors, spacing, or fonts from scratch.
+
+${buildBrandingInjectionPattern(manifest.productName, manifest.branding)}
 
 ${buildMockAuthPattern(manifest.roles)}
 
