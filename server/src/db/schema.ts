@@ -76,6 +76,13 @@ export const sessions = pgTable('sessions', {
    */
   appRefinementRounds: integer('app_refinement_rounds').notNull().default(0),
   marketingRefinementRounds: integer('marketing_refinement_rounds').notNull().default(0),
+  /**
+   * The manifest version the build pipeline reads (Epic 3.8) — null until a
+   * build has ever been requested. Set only by `freezeManifest`, never a raw
+   * session update, so post-freeze manifest edits never retroactively change
+   * what an in-flight or completed build was generated from.
+   */
+  frozenManifestVersion: integer('frozen_manifest_version'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   expiresAt: timestamp('expires_at', { withTimezone: true }),

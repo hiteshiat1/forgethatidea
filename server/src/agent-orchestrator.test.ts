@@ -701,6 +701,17 @@ describe('session analytics events (#42)', () => {
     ]);
     const deps = buildDeps(anthropicClient);
     const session = await deps.sessionStore.create('user-1');
+    await deps.manifestStore.save(session.id, {
+      schemaVersion: 1,
+      productName: 'Habit Tracker',
+      icp: 'People building daily habits.',
+      entities: [{ name: 'Habit', fields: [{ name: 'title', type: 'string' }] }],
+      screens: [{ name: 'Dashboard', purpose: 'See habits' }],
+      roles: ['user'],
+      keyActions: ['Mark complete'],
+      branding: { accentColor: '#2E7D32', tone: 'calm' },
+      references: { researchCardIds: [] },
+    });
     await deps.sessionStore.update(session.id, {
       phase: 'refine',
       cards: [

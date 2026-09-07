@@ -1,14 +1,32 @@
 import { describe, it, expect } from 'vitest';
 import { createPhaseTransitionTool } from './phase-transition-tool.js';
 import { createInMemorySessionStore } from './session-store.js';
+import { createInMemoryManifestStore } from './manifest-store.js';
+import type { BuildManifest } from '@forge/shared';
+
+function manifest(): BuildManifest {
+  return {
+    schemaVersion: 1,
+    productName: 'Habit Tracker',
+    icp: 'People building daily habits.',
+    entities: [{ name: 'Habit', fields: [{ name: 'title', type: 'string' }] }],
+    screens: [{ name: 'Dashboard', purpose: 'See habits' }],
+    roles: ['user'],
+    keyActions: ['Mark complete'],
+    branding: { accentColor: '#2E7D32', tone: 'calm' },
+    references: { researchCardIds: [] },
+  };
+}
 
 describe('transition_phase', () => {
   it('advances the session to the next phase and reports the event', async () => {
     const store = createInMemorySessionStore();
+    const manifestStore = createInMemoryManifestStore();
     const session = await store.create('user-1');
     const events: unknown[] = [];
     const tool = createPhaseTransitionTool({
       store,
+      manifestStore,
       sessionId: session.id,
       onEvent: (e) => events.push(e),
     });
@@ -23,10 +41,12 @@ describe('transition_phase', () => {
 
   it('rejects an illegal (skip-ahead) transition without changing the phase or emitting an event', async () => {
     const store = createInMemorySessionStore();
+    const manifestStore = createInMemoryManifestStore();
     const session = await store.create('user-1');
     const events: unknown[] = [];
     const tool = createPhaseTransitionTool({
       store,
+      manifestStore,
       sessionId: session.id,
       onEvent: (e) => events.push(e),
     });
@@ -41,6 +61,7 @@ describe('transition_phase', () => {
 
   it('rejects a transition blocked by a phase gate without changing the phase', async () => {
     const store = createInMemorySessionStore();
+    const manifestStore = createInMemoryManifestStore();
     const session = await store.create('user-1');
     await store.update(session.id, { phase: 'sources' });
     await store.update(session.id, { phase: 'brainstorm' });
@@ -48,6 +69,7 @@ describe('transition_phase', () => {
     const events: unknown[] = [];
     const tool = createPhaseTransitionTool({
       store,
+      manifestStore,
       sessionId: session.id,
       onEvent: (e) => events.push(e),
     });
@@ -60,9 +82,11 @@ describe('transition_phase', () => {
     expect(events).toEqual([]);
   });
 
-  it('allows entering build once the required cards are locked', async () => {
+  it('allows entering build once the required cards are locked, freezing the manifest', async () => {
     const store = createInMemorySessionStore();
+    const manifestStore = createInMemoryManifestStore();
     const session = await store.create('user-1');
+    await manifestStore.save(session.id, manifest());
     await store.update(session.id, { phase: 'sources' });
     await store.update(session.id, { phase: 'brainstorm' });
     await store.update(session.id, {
@@ -76,6 +100,7 @@ describe('transition_phase', () => {
     const events: unknown[] = [];
     const tool = createPhaseTransitionTool({
       store,
+      manifestStore,
       sessionId: session.id,
       onEvent: (e) => events.push(e),
     });
@@ -84,13 +109,45 @@ describe('transition_phase', () => {
 
     expect(result).toMatchObject({ ok: true, phase: 'build' });
     expect(events).toEqual([{ type: 'phase_changed', from: 'planning', to: 'build' }]);
+    const updated = await store.get(session.id);
+    expect(updated?.frozenManifestVersion).toBe(1);
+  });
+
+  it('rejects entering build when the gate passes but no manifest exists to freeze', async () => {
+    const store = createInMemorySessionStore();
+    const manifestStore = createInMemoryManifestStore();
+    const session = await store.create('user-1');
+    await store.update(session.id, { phase: 'sources' });
+    await store.update(session.id, { phase: 'brainstorm' });
+    await store.update(session.id, {
+      phase: 'planning',
+      cards: ['options', 'architecture', 'cost', 'marketing'].map((type) => ({
+        id: `${type}-1`,
+        type,
+        status: 'locked',
+      })),
+    });
+    const tool = createPhaseTransitionTool({
+      store,
+      manifestStore,
+      sessionId: session.id,
+      onEvent: () => {},
+    });
+
+    const result = await tool.transition_phase({ to: 'build' });
+
+    expect(result).toEqual({ ok: false, error: 'no_manifest_to_freeze' });
+    const updated = await store.get(session.id);
+    expect(updated?.phase).toBe('planning');
   });
 
   it('returns an error for a nonexistent session', async () => {
     const store = createInMemorySessionStore();
+    const manifestStore = createInMemoryManifestStore();
     const events: unknown[] = [];
     const tool = createPhaseTransitionTool({
       store,
+      manifestStore,
       sessionId: 'nonexistent',
       onEvent: (e) => events.push(e),
     });
@@ -101,8 +158,14 @@ describe('transition_phase', () => {
 
   it('rejects malformed input safely', async () => {
     const store = createInMemorySessionStore();
+    const manifestStore = createInMemoryManifestStore();
     const session = await store.create('user-1');
-    const tool = createPhaseTransitionTool({ store, sessionId: session.id, onEvent: () => {} });
+    const tool = createPhaseTransitionTool({
+      store,
+      manifestStore,
+      sessionId: session.id,
+      onEvent: () => {},
+    });
 
     const result = await tool.transition_phase({ to: 'not-a-real-phase' });
     expect(result).toEqual({ ok: false, error: 'invalid_input' });

@@ -1,11 +1,14 @@
 import { PHASES, type Phase } from '@forge/shared';
 import { transition, IllegalTransitionError } from './phase-machine.js';
 import { checkGate, type SessionCard } from './phase-gates.js';
+import { freezeManifest } from './manifest-freeze.js';
 import type { SessionStore } from './session-store.js';
+import type { ManifestStore } from './manifest-store.js';
 import type { TurnEvent } from './turn-events.js';
 
 export interface PhaseTransitionToolDeps {
   store: SessionStore;
+  manifestStore: ManifestStore;
   sessionId: string;
   /** Called with a phase_changed event immediately after a successful transition. */
   onEvent: (event: TurnEvent) => void;
@@ -16,7 +19,8 @@ export type PhaseTransitionResult =
   | { ok: false; error: 'session_not_found' }
   | { ok: false; error: 'invalid_input' }
   | { ok: false; error: 'illegal_phase_transition'; from: Phase; to: Phase }
-  | { ok: false; error: 'phase_gate_not_satisfied'; to: Phase; missing: string[] };
+  | { ok: false; error: 'phase_gate_not_satisfied'; to: Phase; missing: string[] }
+  | { ok: false; error: 'no_manifest_to_freeze' };
 
 function isTransitionInput(input: unknown): input is { to: Phase } {
   return (
@@ -37,7 +41,7 @@ function isTransitionInput(input: unknown): input is { to: Phase } {
  * event log the turn response returns to the client.
  */
 export function createPhaseTransitionTool(deps: PhaseTransitionToolDeps) {
-  const { store, sessionId, onEvent } = deps;
+  const { store, manifestStore, sessionId, onEvent } = deps;
 
   async function transition_phase(rawInput: unknown): Promise<PhaseTransitionResult> {
     if (!isTransitionInput(rawInput)) {
@@ -66,6 +70,17 @@ export function createPhaseTransitionTool(deps: PhaseTransitionToolDeps) {
         to: rawInput.to,
         missing: gate.missing,
       };
+    }
+
+    // Entering `build` is the real "on confirm" moment (Epic 3.8): freeze
+    // whatever manifest version is latest right now as the immutable input
+    // the build pipeline (Epic 4) will read, so a later manifest edit can
+    // never retroactively change what an in-flight or completed build used.
+    if (rawInput.to === 'build') {
+      const freezeResult = await freezeManifest({ sessionStore: store, manifestStore, sessionId });
+      if (!freezeResult.ok) {
+        return { ok: false, error: freezeResult.error };
+      }
     }
 
     await store.update(sessionId, { phase: rawInput.to });
