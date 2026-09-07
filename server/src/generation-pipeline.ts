@@ -16,6 +16,13 @@ export interface GenerationAnthropicClient {
   }>;
 }
 
+export interface RepairContext {
+  /** The previously generated code that failed validation. */
+  previousCode: string;
+  /** The exact validation error codes it failed on (#66's ValidationFailure.errors). */
+  errors: string[];
+}
+
 export interface GenerationPipelineInput {
   spec: GenerationSpec;
   anthropicClient: GenerationAnthropicClient;
@@ -24,6 +31,8 @@ export interface GenerationPipelineInput {
   timeoutMs?: number;
   /** Called with each chunk of generated text as it streams in, for progress UI. */
   onProgress?: (text: string) => void;
+  /** When set, this call is a repair attempt (#67) — the prompt includes the prior code and exact errors instead of starting fresh. */
+  repairContext?: RepairContext;
 }
 
 export interface GenerationSuccess {
@@ -53,6 +62,27 @@ export function isGenerationFailure(result: GenerationResult): result is Generat
 const DEFAULT_MODEL = 'claude-opus-5';
 const DEFAULT_MAX_TOKENS = 8192;
 const DEFAULT_TIMEOUT_MS = 120_000;
+
+/**
+ * Wraps the base generation prompt with the exact validation errors (#66)
+ * and the prior candidate's code (Epic 4.6) — including real error codes
+ * rather than a generic "try again" gives the model something concrete to
+ * fix, and the prior code lets it make a targeted edit instead of guessing
+ * what it wrote before.
+ */
+function buildRepairPrompt(basePrompt: string, repair: RepairContext): string {
+  return `${basePrompt}
+
+The previous attempt failed validation with these exact errors:
+${repair.errors.map((e) => `- ${e}`).join('\n')}
+
+Previous attempt:
+\`\`\`
+${repair.previousCode}
+\`\`\`
+
+Fix every error listed above and produce a corrected, complete replacement for the entire file — not a diff or partial snippet.`;
+}
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -91,10 +121,13 @@ export async function runGenerationPipeline(
   const maxTokens = input.maxTokens ?? DEFAULT_MAX_TOKENS;
   const timeoutMs = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
-  const prompt = buildCodegenPrompt({
+  const basePrompt = buildCodegenPrompt({
     manifest: specToPromptManifest(spec),
     archetype: ARCHETYPES[spec.archetype],
   });
+  const prompt = input.repairContext
+    ? buildRepairPrompt(basePrompt, input.repairContext)
+    : basePrompt;
 
   let result;
   try {

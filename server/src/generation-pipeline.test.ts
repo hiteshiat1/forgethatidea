@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { runGenerationPipeline, isGenerationFailure } from './generation-pipeline.js';
 import type { GenerationSpec } from './generation-spec.js';
+import type { AnthropicMessageParam } from './anthropic-client.js';
 
 function spec(): GenerationSpec {
   return {
@@ -119,5 +120,24 @@ describe('runGenerationPipeline (#65)', () => {
     if (isGenerationFailure(result)) {
       expect(result.error).toBe('empty_response');
     }
+  });
+
+  it('includes the prior code and exact validation errors in the prompt when repairing (#67)', async () => {
+    const client = scriptedClient('export default function App() { return null; }');
+
+    await runGenerationPipeline({
+      spec: spec(),
+      anthropicClient: client,
+      repairContext: {
+        previousCode: 'export default function App() { return <div>',
+        errors: ['compile_error', 'forbidden_localStorage'],
+      },
+    });
+
+    const req = client.streamMessage.mock.calls[0]![0] as { messages: AnthropicMessageParam[] };
+    const sentPrompt = req.messages[0]!.content;
+    expect(sentPrompt).toContain('export default function App() { return <div>');
+    expect(sentPrompt).toContain('compile_error');
+    expect(sentPrompt).toContain('forbidden_localStorage');
   });
 });
