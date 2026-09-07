@@ -8,7 +8,7 @@ import type { ArchetypeDefinition } from './archetype-catalog.js';
 import { ARCHETYPES } from './archetype-catalog.js';
 import type { BuildManifest } from '@forge/shared';
 
-function manifest(): BuildManifest {
+function manifest(overrides: Partial<BuildManifest> = {}): BuildManifest {
   return {
     schemaVersion: 1,
     productName: 'HabitLoop',
@@ -28,6 +28,7 @@ function manifest(): BuildManifest {
     branding: { accentColor: '#2E7D32', tone: 'encouraging' },
     references: { researchCardIds: [] },
     archetype: 'crud-tracker',
+    ...overrides,
   };
 }
 
@@ -72,6 +73,23 @@ describe('buildCodegenPrompt (#63)', () => {
     const archetype: ArchetypeDefinition = ARCHETYPES['crud-tracker'];
     const prompt = buildCodegenPrompt({ manifest: manifest(), archetype });
     expect(prompt).toContain(archetype.outOfScope[0]);
+  });
+
+  it('embeds the standardized mock auth pattern (#70)', () => {
+    const prompt = buildCodegenPrompt({
+      manifest: manifest(),
+      archetype: ARCHETYPES['crud-tracker'],
+    });
+    expect(prompt.toLowerCase()).toContain('mock authentication pattern');
+  });
+
+  it('includes a role switcher in the embedded pattern when the manifest defines multiple roles', () => {
+    const withRoles = manifest({ roles: ['buyer', 'seller'] });
+    const prompt = buildCodegenPrompt({
+      manifest: withRoles,
+      archetype: ARCHETYPES['marketplace-listing'],
+    });
+    expect(prompt.toLowerCase()).toContain('switch role');
   });
 
   it('requires seed data realistic and relevant to the ICP', () => {
