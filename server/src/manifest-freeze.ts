@@ -8,10 +8,30 @@ export interface ManifestFreezeDeps {
   sessionId: string;
 }
 
-export type FreezeManifestResult =
-  | { ok: true; frozenVersion: number }
-  | { ok: false; error: 'session_not_found' }
-  | { ok: false; error: 'no_manifest_to_freeze' };
+export interface FreezeManifestSuccess {
+  ok: true;
+  frozenVersion: number;
+}
+
+export interface FreezeManifestFailure {
+  ok: false;
+  error: 'session_not_found' | 'no_manifest_to_freeze';
+}
+
+export type FreezeManifestResult = FreezeManifestSuccess | FreezeManifestFailure;
+
+/**
+ * Explicit type guard rather than relying on inline `!result.ok` narrowing —
+ * this exact pattern has hit a Vercel-only build failure multiple times this
+ * project (Vercel's separately-invoked, non-Turbo-cached tsc pass doesn't
+ * always narrow a discriminated union the same way local tsc does, even on
+ * an identical TypeScript version). Sidesteps the whole class of issue.
+ */
+export function isFreezeManifestFailure(
+  result: FreezeManifestResult,
+): result is FreezeManifestFailure {
+  return result.ok === false;
+}
 
 /**
  * Locked-manifest freeze (Epic 3.8): on confirm, records which manifest

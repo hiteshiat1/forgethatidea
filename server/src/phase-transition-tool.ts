@@ -1,7 +1,7 @@
 import { PHASES, type Phase } from '@forge/shared';
 import { transition, IllegalTransitionError } from './phase-machine.js';
 import { checkGate, type SessionCard } from './phase-gates.js';
-import { freezeManifest } from './manifest-freeze.js';
+import { freezeManifest, isFreezeManifestFailure } from './manifest-freeze.js';
 import type { SessionStore } from './session-store.js';
 import type { ManifestStore } from './manifest-store.js';
 import type { TurnEvent } from './turn-events.js';
@@ -78,7 +78,7 @@ export function createPhaseTransitionTool(deps: PhaseTransitionToolDeps) {
     // never retroactively change what an in-flight or completed build used.
     if (rawInput.to === 'build') {
       const freezeResult = await freezeManifest({ sessionStore: store, manifestStore, sessionId });
-      if (!freezeResult.ok) {
+      if (isFreezeManifestFailure(freezeResult)) {
         return { ok: false, error: freezeResult.error };
       }
     }
