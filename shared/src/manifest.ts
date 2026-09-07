@@ -67,6 +67,22 @@ export const manifestReferencesSchema = z.object({
 });
 export type ManifestReferences = z.infer<typeof manifestReferencesSchema>;
 
+/**
+ * The five templated-generation archetypes (Epic 4.1) a manifest can map
+ * onto. Kept as a plain string enum here (rather than importing from
+ * server-side archetype-catalog.ts, which owns the full definitions/mapping
+ * logic) since @forge/shared must stay free of server-only code — this is
+ * just the identifier set the manifest records once a choice is made.
+ */
+export const archetypeEnum = z.enum([
+  'crud-tracker',
+  'marketplace-listing',
+  'booking-scheduler',
+  'content-feed',
+  'dashboard',
+]);
+export type Archetype = z.infer<typeof archetypeEnum>;
+
 export const buildManifestSchema = z.object({
   /** Bumped whenever the shape changes in a way older data can't satisfy without migration. */
   schemaVersion: z.literal(MANIFEST_SCHEMA_VERSION),
@@ -79,6 +95,13 @@ export const buildManifestSchema = z.object({
   keyActions: z.array(z.string().trim().min(1)).min(1, 'a manifest needs at least one key action'),
   branding: manifestBrandingSchema,
   references: manifestReferencesSchema.default({ researchCardIds: [] }),
+  /**
+   * Which archetype (#62) this manifest maps onto — optional because it's
+   * chosen automatically once enough of the manifest exists (chooseArchetype
+   * in server/src/archetype-catalog.ts), not always known upfront during
+   * brainstorm/planning while the manifest is still being built up.
+   */
+  archetype: archetypeEnum.optional(),
 });
 export type BuildManifest = z.infer<typeof buildManifestSchema>;
 

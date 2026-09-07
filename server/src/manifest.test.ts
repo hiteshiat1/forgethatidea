@@ -80,6 +80,20 @@ describe('buildManifestSchema', () => {
       expect(result.data.references).toEqual({ researchCardIds: [] });
     }
   });
+
+  it('accepts a manifest with a valid archetype recorded (#62)', () => {
+    const withArchetype = { ...validManifest, archetype: 'crud-tracker' };
+    expect(buildManifestSchema.safeParse(withArchetype).success).toBe(true);
+  });
+
+  it('accepts a manifest with no archetype yet — chosen later, not always known upfront', () => {
+    expect(buildManifestSchema.safeParse(validManifest).success).toBe(true);
+  });
+
+  it('rejects an archetype outside the 5-archetype catalog', () => {
+    const bad = { ...validManifest, archetype: 'not-a-real-archetype' };
+    expect(buildManifestSchema.safeParse(bad).success).toBe(false);
+  });
 });
 
 describe('validateManifest', () => {
