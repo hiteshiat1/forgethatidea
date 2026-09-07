@@ -17,6 +17,15 @@ export interface ValidationFailure {
 export type ValidationResult = ValidationSuccess | ValidationFailure;
 
 /**
+ * Explicit type guard rather than relying on inline `!result.ok` narrowing —
+ * this pattern has caused a Vercel-only build failure multiple times this
+ * project even when local tsc is clean on the same TypeScript version.
+ */
+export function isValidationFailure(result: ValidationResult): result is ValidationFailure {
+  return result.ok === false;
+}
+
+/**
  * Static validation gate (Epic 4.5): every candidate artifact from the
  * generation pipeline (#65) is checked here before it's ever shown to a
  * user. Two independent checks run and their failures are combined rather

@@ -1,4 +1,4 @@
-import type { AssistantContentBlock, StreamMessageRequest } from './anthropic-client.js';
+import type { MessageContentBlock, StreamMessageRequest } from './anthropic-client.js';
 import { buildCodegenPrompt } from './codegen-contract.js';
 import { ARCHETYPES } from './archetype-catalog.js';
 import { DEFAULT_PRICING, normalizeUsage } from './model-router.js';
@@ -12,7 +12,15 @@ export interface GenerationAnthropicClient {
     inputTokens: number;
     outputTokens: number;
     stopReason: string;
-    content: AssistantContentBlock[];
+    /**
+     * Widened to MessageContentBlock (rather than AssistantContentBlock) so
+     * this interface can be satisfied by the same real anthropic client the
+     * agent orchestrator (#34) uses (OrchestratorAnthropicClient) without a
+     * type mismatch — this pipeline never sends tools, so a tool_result
+     * block is never actually produced, but the client's declared type
+     * still needs to allow for it structurally.
+     */
+    content: MessageContentBlock[];
   }>;
 }
 

@@ -55,6 +55,13 @@ import {
   type ManifestStore,
 } from './manifest-store.js';
 import { createAgentOrchestrator, type OrchestratorAnthropicClient } from './agent-orchestrator.js';
+import {
+  createDbArtifactStore,
+  createInMemoryArtifactStore,
+  type ArtifactStore,
+} from './artifact-store.js';
+import { createBuildOrchestrator } from './build-orchestrator.js';
+import { registerBuildRoutes } from './routes/build.js';
 import { registerAgentRoutes } from './routes/agent.js';
 
 declare module 'fastify' {
@@ -98,6 +105,8 @@ export interface BuildAppDeps {
   manifestStore?: ManifestStore;
   /** Anthropic client the agent orchestrator (Epic 2) calls directly — needs the richer tool-calling shape, not the generic model router. Defaults to `anthropicClient` above. */
   orchestratorAnthropicClient?: OrchestratorAnthropicClient;
+  /** Generated-artifact persistence (Epic 4.13). Defaults to DB-backed when `db` is available, else in-memory. */
+  artifactStore?: ArtifactStore;
 }
 
 /**
@@ -297,6 +306,26 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
       analyticsLogger: app.log,
     });
     registerAgentRoutes(app, authStore, sessionStore, orchestrator);
+  }
+
+  // Generated-artifact persistence (Epic 4.13). Same DB-backed-else-in-memory
+  // convention as every other store above.
+  const artifactStore =
+    deps.artifactStore ?? (db ? createDbArtifactStore(db) : createInMemoryArtifactStore());
+
+  // Build orchestrator (Epic 4, wiring #61-67/#74 into a real route): only
+  // registered once an Anthropic client is configured, same guard as the
+  // agent orchestrator above — there's no meaningful build without a model
+  // to generate from.
+  if (orchestratorAnthropicClient) {
+    const buildOrchestrator = createBuildOrchestrator({
+      sessionStore,
+      manifestStore,
+      artifactStore,
+      costGuard,
+      anthropicClient: orchestratorAnthropicClient,
+    });
+    registerBuildRoutes(app, authStore, sessionStore, buildOrchestrator);
   }
 
   return app;

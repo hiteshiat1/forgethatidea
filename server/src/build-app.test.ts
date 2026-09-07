@@ -339,6 +339,73 @@ describe('agent orchestrator wiring', () => {
   });
 });
 
+describe('build orchestrator wiring', () => {
+  it('registers the build route when an anthropic client is available', async () => {
+    const anthropicClient = {
+      streamMessage: vi.fn(async () => ({
+        inputTokens: 1,
+        outputTokens: 1,
+        stopReason: 'end_turn',
+        content: [
+          { type: 'text' as const, text: 'export default function App() { return null; }' },
+        ],
+      })),
+    };
+    const app = buildApp(testEnv(), { orchestratorAnthropicClient: anthropicClient });
+
+    const signupRes = await app.inject({
+      method: 'POST',
+      url: '/api/auth/signup',
+      payload: { email: 'build-wired@example.com', password: 'correct horse battery staple' },
+    });
+    const setCookie = signupRes.headers['set-cookie'];
+    const authCookie = String(Array.isArray(setCookie) ? setCookie[0] : setCookie).split(';')[0]!;
+
+    const sessionRes = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: authCookie },
+    });
+    const sessionId = sessionRes.json().id;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${sessionId}/build`,
+      headers: { cookie: authCookie },
+    });
+
+    // No manifest frozen yet in this test — route is registered and reachable
+    // (proven by getting a typed build response, not a 404 route-not-found).
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toEqual({ ok: false, error: 'manifest_not_frozen' });
+    await app.close();
+  });
+
+  it('does not register the build route when no anthropic client is configured', async () => {
+    const app = buildApp(testEnv());
+
+    const signupRes = await app.inject({
+      method: 'POST',
+      url: '/api/auth/signup',
+      payload: {
+        email: 'no-build-orchestrator@example.com',
+        password: 'correct horse battery staple',
+      },
+    });
+    const setCookie = signupRes.headers['set-cookie'];
+    const authCookie = String(Array.isArray(setCookie) ? setCookie[0] : setCookie).split(';')[0]!;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sessions/whatever/build',
+      headers: { cookie: authCookie },
+    });
+
+    expect(res.statusCode).toBe(404);
+    await app.close();
+  });
+});
+
 describe('health check', () => {
   it('returns ok', async () => {
     const app = buildApp(testEnv());
