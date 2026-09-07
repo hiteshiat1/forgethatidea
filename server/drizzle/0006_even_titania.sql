@@ -1,0 +1,1 @@
+ALTER TABLE "sessions" ADD COLUMN "frozen_manifest_version" integer;

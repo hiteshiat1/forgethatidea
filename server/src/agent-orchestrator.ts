@@ -199,6 +199,7 @@ export function createAgentOrchestrator(deps: AgentOrchestratorDeps) {
     const sourcesTools = createSourcesTools({ store: sessionStore, sessionId });
     const phaseTransitionTool = createPhaseTransitionTool({
       store: sessionStore,
+      manifestStore,
       sessionId,
       onEvent: (event) => {
         events.push(event);

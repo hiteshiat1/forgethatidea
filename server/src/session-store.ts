@@ -18,6 +18,15 @@ export interface SessionRecord {
   /** Refinement round counters (Epic 2.11) — app and marketing tracked independently. */
   appRefinementRounds: number;
   marketingRefinementRounds: number;
+  /**
+   * The manifest version the build pipeline reads (Epic 3.8) — set once by
+   * `freezeManifest` on confirm, never by a raw session update. `null` until
+   * a build has ever been requested. Frozen deliberately separate from
+   * "latest manifest version" (manifest-store.ts) so post-freeze manifest
+   * edits (a new version) never retroactively change what an in-flight or
+   * completed build was generated from.
+   */
+  frozenManifestVersion: number | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -30,6 +39,7 @@ export interface SessionUpdate {
   sourcesIntake?: SourcesIntake;
   appRefinementRounds?: number;
   marketingRefinementRounds?: number;
+  frozenManifestVersion?: number | null;
 }
 
 /**
@@ -96,6 +106,7 @@ export function createInMemorySessionStore(): SessionStore {
         sourcesIntake: { sources: [], declined: false },
         appRefinementRounds: 0,
         marketingRefinementRounds: 0,
+        frozenManifestVersion: null,
         createdAt: now,
         updatedAt: now,
       };
