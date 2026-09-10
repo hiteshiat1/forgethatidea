@@ -63,6 +63,8 @@ import {
 import { createBuildOrchestrator } from './build-orchestrator.js';
 import { registerBuildRoutes } from './routes/build.js';
 import { registerExportRoutes } from './routes/export.js';
+import { createRefineAppOrchestrator } from './refine-app-orchestrator.js';
+import { registerRefineAppRoutes } from './routes/refine-app.js';
 import { registerAgentRoutes } from './routes/agent.js';
 
 declare module 'fastify' {
@@ -328,6 +330,16 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
       analyticsLogger: app.log,
     });
     registerBuildRoutes(app, authStore, sessionStore, buildOrchestrator);
+
+    // Refine-app orchestrator (Epic 4.15): targeted diff-edits to the active
+    // build. Same Anthropic-client guard as the build route above.
+    const refineAppOrchestrator = createRefineAppOrchestrator({
+      sessionStore,
+      artifactStore,
+      anthropicClient: orchestratorAnthropicClient,
+      refinementLimits,
+    });
+    registerRefineAppRoutes(app, authStore, sessionStore, refineAppOrchestrator);
   }
 
   // App export (Epic 4.14): downloads the session's active build. Registered
