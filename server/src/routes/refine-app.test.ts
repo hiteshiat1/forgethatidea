@@ -25,13 +25,29 @@ function clientReturning(code: string) {
   };
 }
 
-async function buildTestApp() {
+function sequencedClient(classificationText: string, secondText: string) {
+  let call = 0;
+  return {
+    streamMessage: vi.fn(async (_req: unknown, handlers: { onText?: (t: string) => void }) => {
+      call += 1;
+      const text = call === 1 ? classificationText : secondText;
+      handlers.onText?.(text);
+      return {
+        inputTokens: 10,
+        outputTokens: 20,
+        stopReason: 'end_turn',
+        content: [{ type: 'text' as const, text }],
+      };
+    }),
+  };
+}
+
+async function buildTestApp(anthropicClient = clientReturning(EDITED_CODE)) {
   const app = Fastify({ logger: false });
   await app.register(cookie);
   const authStore = createInMemoryAuthStore();
   const sessionStore = createInMemorySessionStore();
   const artifactStore = createInMemoryArtifactStore();
-  const anthropicClient = clientReturning(EDITED_CODE);
   const orchestrator = createRefineAppOrchestrator({
     sessionStore,
     artifactStore,
@@ -143,5 +159,33 @@ describe('POST /api/sessions/:id/refine-app', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ ok: true, code: EDITED_CODE, version: 2 });
+  });
+
+  it('answers a clarifying question without bumping the artifact version (#85)', async () => {
+    const anthropicClient = sequencedClient(
+      JSON.stringify({ kind: 'clarification' }),
+      'It submits the form.',
+    );
+    const { app, sessionStore, artifactStore } = await buildTestApp(anthropicClient);
+    const authCookie = await signUpAndGetCookie(app);
+    const sessionId = await createSessionAs(app, authCookie);
+    await artifactStore.save(sessionId, 'app', { manifestId: 'm1', content: { code: 'old code' } });
+    await sessionStore.update(sessionId, { activeAppVersion: 1 });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${sessionId}/refine-app`,
+      headers: { cookie: authCookie },
+      payload: { changeRequest: 'What does the Save button do?' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      ok: true,
+      kind: 'clarification',
+      answer: 'It submits the form.',
+    });
+    const updatedSession = await sessionStore.get(sessionId);
+    expect(updatedSession?.activeAppVersion).toBe(1);
   });
 });
