@@ -31,6 +31,15 @@ export function isIntentParseFailure(result: IntentParseResult): result is Inten
 }
 
 /**
+ * Explicit type guard rather than relying on inline `.ambiguous` narrowing —
+ * this pattern has caused a Vercel-only build failure multiple times this
+ * project even when local tsc is clean on the same TypeScript version.
+ */
+export function isAmbiguousIntent(intent: ChangeIntent): intent is AmbiguousIntent {
+  return intent.ambiguous === true;
+}
+
+/**
  * Composes the request-parsing prompt (Epic 5.5): turns a free-text change
  * request into a structured edit intent (what's changing, and where) that
  * gets passed to the diff-edit pipeline (#76) alongside the raw request, so

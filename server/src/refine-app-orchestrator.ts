@@ -6,7 +6,7 @@ import {
 } from './refinement-diff-edit.js';
 import { classifyRefinementMessage } from './refinement-round-classifier.js';
 import { answerClarification } from './refinement-clarification.js';
-import { parseChangeIntent } from './refinement-intent-parser.js';
+import { parseChangeIntent, isAmbiguousIntent } from './refinement-intent-parser.js';
 import {
   recordRefinementRound,
   isRefinementFailure,
@@ -117,7 +117,7 @@ export function createRefineAppOrchestrator(deps: RefineAppOrchestratorDeps) {
       model: deps.model,
     });
 
-    if (intent.ambiguous) {
+    if (isAmbiguousIntent(intent)) {
       return { ok: true, kind: 'clarification', answer: intent.clarifyingQuestion };
     }
 
