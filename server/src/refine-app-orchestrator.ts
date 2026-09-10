@@ -4,6 +4,8 @@ import {
   isDiffEditFailure,
   type DiffEditAnthropicClient,
 } from './refinement-diff-edit.js';
+import { classifyRefinementMessage } from './refinement-round-classifier.js';
+import { answerClarification } from './refinement-clarification.js';
 import {
   recordRefinementRound,
   isRefinementFailure,
@@ -22,13 +24,27 @@ export interface RefineAppOrchestratorDeps {
   maxRepairRounds?: number;
 }
 
-export interface RefineAppSuccess {
+export interface RefineAppChangeSuccess {
   ok: true;
+  kind: 'change_request';
   code: string;
   version: number;
   revertedToOriginal: boolean;
   rounds: number;
 }
+
+/**
+ * A clarifying question answered conversationally (Epic 5.1: "Clarifying
+ * Q&A within a round is free") — no round consumed, no new artifact
+ * version, code left untouched.
+ */
+export interface RefineAppClarificationSuccess {
+  ok: true;
+  kind: 'clarification';
+  answer: string;
+}
+
+export type RefineAppSuccess = RefineAppChangeSuccess | RefineAppClarificationSuccess;
 
 export interface RefineAppFailure {
   ok: false;
@@ -70,6 +86,25 @@ export function createRefineAppOrchestrator(deps: RefineAppOrchestratorDeps) {
       return { ok: false, error: 'no_build_to_refine' };
     }
 
+    const { code: currentCode } = activeArtifact.content as { code: string };
+
+    const classification = await classifyRefinementMessage({
+      currentCode,
+      message: changeRequest,
+      anthropicClient,
+      model: deps.model,
+    });
+
+    if (classification.kind === 'clarification') {
+      const answer = await answerClarification({
+        currentCode,
+        question: changeRequest,
+        anthropicClient,
+        model: deps.model,
+      });
+      return { ok: true, kind: 'clarification', answer };
+    }
+
     const roundResult = await recordRefinementRound(
       sessionStore,
       sessionId,
@@ -83,7 +118,6 @@ export function createRefineAppOrchestrator(deps: RefineAppOrchestratorDeps) {
       return { ok: false, error: 'refinement_limit_reached' };
     }
 
-    const { code: currentCode } = activeArtifact.content as { code: string };
     const editResult = await runDiffEdit({
       currentCode,
       changeRequest,
@@ -105,6 +139,7 @@ export function createRefineAppOrchestrator(deps: RefineAppOrchestratorDeps) {
 
     return {
       ok: true,
+      kind: 'change_request',
       code: editResult.code,
       version: saved.version,
       revertedToOriginal: editResult.revertedToOriginal,
