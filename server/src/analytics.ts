@@ -40,11 +40,18 @@ export interface AppExportedEvent {
   version: number;
 }
 
+export interface ContentScreenedEvent {
+  type: 'content_screened';
+  sessionId: string;
+  allowed: boolean;
+}
+
 export type AnalyticsEvent =
   | PhaseEnteredEvent
   | RefinementUsedEvent
   | SessionConvertedEvent
-  | AppExportedEvent;
+  | AppExportedEvent
+  | ContentScreenedEvent;
 
 export interface AnalyticsLogger {
   info(obj: Record<string, unknown>, msg?: string): void;

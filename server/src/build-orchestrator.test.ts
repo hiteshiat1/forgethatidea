@@ -4,6 +4,7 @@ import { createInMemorySessionStore } from './session-store.js';
 import { createInMemoryManifestStore } from './manifest-store.js';
 import { createInMemoryArtifactStore } from './artifact-store.js';
 import { createCostGuard, createInMemoryCostGuardStore } from './cost-guard.js';
+import type { StreamMessageRequest } from './anthropic-client.js';
 import type { BuildManifest } from '@forge/shared';
 
 function silentLogger() {
@@ -41,7 +42,27 @@ function clientReturning(code: string) {
   };
 }
 
-async function buildDeps(anthropicClient: ReturnType<typeof clientReturning>) {
+/** Returns `screeningText` for the safety-screening call (spotted by asking for JSON), and `code` for every other call. */
+function clientWithScreening(screeningText: string, code: string) {
+  return {
+    streamMessage: vi.fn(async (req: StreamMessageRequest) => {
+      const isScreeningCall = req.messages.some(
+        (m) => typeof m.content === 'string' && m.content.includes('Screen for'),
+      );
+      const text = isScreeningCall ? screeningText : code;
+      return {
+        inputTokens: 10,
+        outputTokens: 5,
+        stopReason: 'end_turn',
+        content: [{ type: 'text' as const, text }],
+      };
+    }),
+  };
+}
+
+async function buildDeps(
+  anthropicClient: ReturnType<typeof clientReturning> | ReturnType<typeof clientWithScreening>,
+) {
   const sessionStore = createInMemorySessionStore();
   const manifestStore = createInMemoryManifestStore();
   const artifactStore = createInMemoryArtifactStore();
@@ -158,6 +179,64 @@ describe('createBuildOrchestrator (#75)', () => {
     expect(isBuildFailure(result)).toBe(true);
     if (isBuildFailure(result)) {
       expect(result.error).toBe('cost_cap_exceeded');
+    }
+  });
+
+  it('blocks the build when content safety screening returns a not-allowed decision (#78)', async () => {
+    const client = clientWithScreening(
+      JSON.stringify({ allowed: false, reason: 'Requests a scam-facilitation tool.' }),
+      VALID_CODE,
+    );
+    const deps = await buildDeps(client);
+    const session = await deps.sessionStore.create('user-1');
+    await deps.manifestStore.save(session.id, manifest());
+    await deps.sessionStore.update(session.id, { frozenManifestVersion: 1, phase: 'build' });
+    const orchestrator = createBuildOrchestrator(deps);
+
+    const result = await orchestrator.handleBuild(session.id, 'user-1');
+
+    expect(isBuildFailure(result)).toBe(true);
+    if (isBuildFailure(result)) {
+      expect(result.error).toBe('content_blocked');
+      expect(result.reason).toContain('scam');
+    }
+  });
+
+  it('logs the screening decision via analyticsLogger (#78)', async () => {
+    const client = clientWithScreening(JSON.stringify({ allowed: true }), VALID_CODE);
+    const deps = await buildDeps(client);
+    const session = await deps.sessionStore.create('user-1');
+    await deps.manifestStore.save(session.id, manifest());
+    await deps.sessionStore.update(session.id, { frozenManifestVersion: 1, phase: 'build' });
+    const analyticsLogger = { info: vi.fn() };
+    const orchestrator = createBuildOrchestrator({ ...deps, analyticsLogger });
+
+    await orchestrator.handleBuild(session.id, 'user-1');
+
+    expect(analyticsLogger.info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        analytics_event: true,
+        type: 'content_screened',
+        sessionId: session.id,
+        allowed: true,
+      }),
+      'analytics.content_screened',
+    );
+  });
+
+  it('proceeds with the build when screening is allowed', async () => {
+    const client = clientWithScreening(JSON.stringify({ allowed: true }), VALID_CODE);
+    const deps = await buildDeps(client);
+    const session = await deps.sessionStore.create('user-1');
+    await deps.manifestStore.save(session.id, manifest());
+    await deps.sessionStore.update(session.id, { frozenManifestVersion: 1, phase: 'build' });
+    const orchestrator = createBuildOrchestrator(deps);
+
+    const result = await orchestrator.handleBuild(session.id, 'user-1');
+
+    expect(isBuildFailure(result)).toBe(false);
+    if (!isBuildFailure(result)) {
+      expect(result.code).toBe(VALID_CODE);
     }
   });
 });
