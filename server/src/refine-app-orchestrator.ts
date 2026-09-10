@@ -6,6 +6,7 @@ import {
 } from './refinement-diff-edit.js';
 import { classifyRefinementMessage } from './refinement-round-classifier.js';
 import { answerClarification } from './refinement-clarification.js';
+import { parseChangeIntent } from './refinement-intent-parser.js';
 import {
   recordRefinementRound,
   isRefinementFailure,
@@ -105,6 +106,21 @@ export function createRefineAppOrchestrator(deps: RefineAppOrchestratorDeps) {
       return { ok: true, kind: 'clarification', answer };
     }
 
+    // Parsed before the round is charged (Epic 5.5): a genuinely ambiguous
+    // change request gets one clarifying question back, same free-pass
+    // semantics as #85's clarification path, rather than burning a round on
+    // a guess the editor model would otherwise have to make.
+    const intent = await parseChangeIntent({
+      currentCode,
+      changeRequest,
+      anthropicClient,
+      model: deps.model,
+    });
+
+    if (intent.ambiguous) {
+      return { ok: true, kind: 'clarification', answer: intent.clarifyingQuestion };
+    }
+
     const roundResult = await recordRefinementRound(
       sessionStore,
       sessionId,
@@ -125,6 +141,7 @@ export function createRefineAppOrchestrator(deps: RefineAppOrchestratorDeps) {
       model: deps.model,
       maxTokens: deps.maxTokens,
       maxRepairRounds: deps.maxRepairRounds,
+      intentContext: `target=${intent.target}, action=${intent.action} (${intent.summary})`,
     });
 
     if (isDiffEditFailure(editResult)) {

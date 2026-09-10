@@ -42,6 +42,28 @@ function sequencedClient(classificationText: string, secondText: string) {
   };
 }
 
+/**
+ * A client whose responses follow an ordered list, one per call — used for
+ * the change_request path, which now calls classify -> parse intent ->
+ * diff-edit in sequence (#89).
+ */
+function multiStageClient(texts: string[]) {
+  let call = 0;
+  return {
+    streamMessage: vi.fn(async (_req: unknown, handlers: { onText?: (t: string) => void }) => {
+      const text = texts[call] ?? texts[texts.length - 1]!;
+      call += 1;
+      handlers.onText?.(text);
+      return {
+        inputTokens: 10,
+        outputTokens: 20,
+        stopReason: 'end_turn',
+        content: [{ type: 'text' as const, text }],
+      };
+    }),
+  };
+}
+
 async function buildDeps(anthropicClient: ReturnType<typeof clientReturning>) {
   const sessionStore = createInMemorySessionStore();
   const artifactStore = createInMemoryArtifactStore();
@@ -81,7 +103,16 @@ describe('createRefineAppOrchestrator (#76)', () => {
 
   it('applies the edit, saves a new artifact version, and updates the active version', async () => {
     const deps = await buildDeps(
-      sequencedClient(JSON.stringify({ kind: 'change_request' }), EDITED_CODE),
+      multiStageClient([
+        JSON.stringify({ kind: 'change_request' }),
+        JSON.stringify({
+          ambiguous: false,
+          target: 'label',
+          action: 'add_field',
+          summary: 'Add a label.',
+        }),
+        EDITED_CODE,
+      ]),
     );
     const session = await deps.sessionStore.create('user-1');
     await deps.artifactStore.save(session.id, 'app', {
@@ -105,7 +136,16 @@ describe('createRefineAppOrchestrator (#76)', () => {
 
   it('rejects once the refinement round limit is reached', async () => {
     const deps = await buildDeps(
-      sequencedClient(JSON.stringify({ kind: 'change_request' }), EDITED_CODE),
+      multiStageClient([
+        JSON.stringify({ kind: 'change_request' }),
+        JSON.stringify({
+          ambiguous: false,
+          target: 'label',
+          action: 'add_field',
+          summary: 'Add a label.',
+        }),
+        EDITED_CODE,
+      ]),
     );
     const session = await deps.sessionStore.create('user-1');
     await deps.artifactStore.save(session.id, 'app', {
@@ -162,6 +202,64 @@ describe('createRefineAppOrchestrator (#76)', () => {
     const orchestrator = createRefineAppOrchestrator(deps);
 
     const result = await orchestrator.handleRefine(session.id, 'Why is it sorted this way?');
+
+    expect(isRefineAppFailure(result)).toBe(false);
+    if (!isRefineAppFailure(result)) {
+      expect(result.kind).toBe('clarification');
+    }
+  });
+
+  it('asks a clarifying question for an ambiguous change request, for free, without editing (#89)', async () => {
+    const deps = await buildDeps(
+      multiStageClient([
+        JSON.stringify({ kind: 'change_request' }),
+        JSON.stringify({
+          ambiguous: true,
+          clarifyingQuestion: 'Which entity should the new status field apply to?',
+        }),
+      ]),
+    );
+    const session = await deps.sessionStore.create('user-1');
+    await deps.artifactStore.save(session.id, 'app', {
+      manifestId: 'm1',
+      content: { code: CURRENT_CODE },
+    });
+    await deps.sessionStore.update(session.id, { activeAppVersion: 1 });
+    const orchestrator = createRefineAppOrchestrator(deps);
+
+    const result = await orchestrator.handleRefine(session.id, 'Add a status field.');
+
+    expect(isRefineAppFailure(result)).toBe(false);
+    if (!isRefineAppFailure(result)) {
+      expect(result.kind).toBe('clarification');
+      if (result.kind === 'clarification') {
+        expect(result.answer).toBe('Which entity should the new status field apply to?');
+      }
+    }
+    const updatedSession = await deps.sessionStore.get(session.id);
+    expect(updatedSession?.activeAppVersion).toBe(1);
+    expect(updatedSession?.appRefinementRounds).toBe(0);
+  });
+
+  it('still enforces the round limit even when the ambiguity check itself needs a free pass', async () => {
+    const deps = await buildDeps(
+      multiStageClient([
+        JSON.stringify({ kind: 'change_request' }),
+        JSON.stringify({
+          ambiguous: true,
+          clarifyingQuestion: 'Which entity?',
+        }),
+      ]),
+    );
+    const session = await deps.sessionStore.create('user-1');
+    await deps.artifactStore.save(session.id, 'app', {
+      manifestId: 'm1',
+      content: { code: CURRENT_CODE },
+    });
+    await deps.sessionStore.update(session.id, { activeAppVersion: 1, appRefinementRounds: 3 });
+    const orchestrator = createRefineAppOrchestrator(deps);
+
+    const result = await orchestrator.handleRefine(session.id, 'Add a status field.');
 
     expect(isRefineAppFailure(result)).toBe(false);
     if (!isRefineAppFailure(result)) {

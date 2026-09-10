@@ -19,11 +19,14 @@ export function buildDiffEditPrompt(
   currentCode: string,
   changeRequest: string,
   retry?: DiffEditRetryContext,
+  intentContext?: string,
 ): string {
+  const intentLine = intentContext ? `\n\nParsed intent: ${intentContext}` : '';
+
   const base = `
 Apply this change request to the existing app below with a targeted edit — change only what the request asks for, and leave everything unrelated exactly as it is (unrelated markup, styling, state, and logic must stay visually and behaviorally identical).
 
-Change request: ${changeRequest}
+Change request: ${changeRequest}${intentLine}
 
 Current app:
 \`\`\`
@@ -70,6 +73,8 @@ export interface RunDiffEditInput {
   maxTokens?: number;
   /** Max retry rounds after the initial edit attempt before reverting to the original code. */
   maxRepairRounds?: number;
+  /** Optional parsed target/action hint (Epic 5.5's request parser) appended alongside the raw change request — never in place of it. */
+  intentContext?: string;
 }
 
 export interface DiffEditSuccess {
@@ -113,7 +118,7 @@ const DEFAULT_MAX_REPAIR_ROUNDS = 2;
  * a problem retries can't fix.
  */
 export async function runDiffEdit(input: RunDiffEditInput): Promise<DiffEditResult> {
-  const { currentCode, changeRequest, anthropicClient } = input;
+  const { currentCode, changeRequest, anthropicClient, intentContext } = input;
   const model = input.model ?? DEFAULT_MODEL;
   const maxTokens = input.maxTokens ?? DEFAULT_MAX_TOKENS;
   const maxRepairRounds = input.maxRepairRounds ?? DEFAULT_MAX_REPAIR_ROUNDS;
@@ -121,7 +126,7 @@ export async function runDiffEdit(input: RunDiffEditInput): Promise<DiffEditResu
   let retry: DiffEditRetryContext | undefined;
 
   for (let round = 0; round <= maxRepairRounds; round++) {
-    const prompt = buildDiffEditPrompt(currentCode, changeRequest, retry);
+    const prompt = buildDiffEditPrompt(currentCode, changeRequest, retry, intentContext);
 
     let result;
     try {
