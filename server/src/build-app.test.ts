@@ -406,6 +406,75 @@ describe('build orchestrator wiring', () => {
   });
 });
 
+describe('refine-app route wiring', () => {
+  it('registers the refine-app route when an anthropic client is available', async () => {
+    const anthropicClient = {
+      streamMessage: vi.fn(async () => ({
+        inputTokens: 1,
+        outputTokens: 1,
+        stopReason: 'end_turn',
+        content: [
+          { type: 'text' as const, text: 'export default function App() { return null; }' },
+        ],
+      })),
+    };
+    const app = buildApp(testEnv(), { orchestratorAnthropicClient: anthropicClient });
+
+    const signupRes = await app.inject({
+      method: 'POST',
+      url: '/api/auth/signup',
+      payload: { email: 'refine-app-wired@example.com', password: 'correct horse battery staple' },
+    });
+    const setCookie = signupRes.headers['set-cookie'];
+    const authCookie = String(Array.isArray(setCookie) ? setCookie[0] : setCookie).split(';')[0]!;
+
+    const sessionRes = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: authCookie },
+    });
+    const sessionId = sessionRes.json().id;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${sessionId}/refine-app`,
+      headers: { cookie: authCookie },
+      payload: { changeRequest: 'Add a label.' },
+    });
+
+    // No build yet in this test — route is registered and reachable
+    // (proven by a typed 409, not a 404 route-not-found).
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toMatchObject({ ok: false, error: 'no_build_to_refine' });
+    await app.close();
+  });
+
+  it('does not register the refine-app route when no anthropic client is configured', async () => {
+    const app = buildApp(testEnv());
+
+    const signupRes = await app.inject({
+      method: 'POST',
+      url: '/api/auth/signup',
+      payload: {
+        email: 'no-refine-app-orchestrator@example.com',
+        password: 'correct horse battery staple',
+      },
+    });
+    const setCookie = signupRes.headers['set-cookie'];
+    const authCookie = String(Array.isArray(setCookie) ? setCookie[0] : setCookie).split(';')[0]!;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sessions/whatever/refine-app',
+      headers: { cookie: authCookie },
+      payload: { changeRequest: 'Add a label.' },
+    });
+
+    expect(res.statusCode).toBe(404);
+    await app.close();
+  });
+});
+
 describe('export route wiring', () => {
   it('registers the export route regardless of anthropic client configuration', async () => {
     const app = buildApp(testEnv());
