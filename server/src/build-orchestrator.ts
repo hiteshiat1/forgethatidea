@@ -1,8 +1,10 @@
 import { getFrozenManifest } from './manifest-freeze.js';
 import { compileGenerationSpec, isCompileSpecFailure } from './generation-spec.js';
 import { runAutoRepairLoop, isAutoRepairFailure } from './auto-repair-loop.js';
+import { screenManifestForSafety } from './content-safety-screen.js';
 import { CostCapExceededError } from './cost-guard.js';
 import { normalizeUsage, DEFAULT_PRICING } from './model-router.js';
+import { emitAnalyticsEvent, type AnalyticsLogger } from './analytics.js';
 import type { SessionStore } from './session-store.js';
 import type { ManifestStore } from './manifest-store.js';
 import type { ArtifactStore } from './artifact-store.js';
@@ -20,6 +22,8 @@ export interface BuildOrchestratorDeps {
   timeoutMs?: number;
   maxRepairRounds?: number;
   onProgress?: (text: string) => void;
+  /** Content safety screening decisions logged here (Epic 4.17's "screening decisions logged"). Defaults to a no-op. */
+  analyticsLogger?: AnalyticsLogger;
 }
 
 export interface BuildSuccess {
@@ -31,7 +35,12 @@ export interface BuildSuccess {
 
 export interface BuildFailure {
   ok: false;
-  error: 'session_not_found' | 'manifest_not_frozen' | 'cost_cap_exceeded' | 'build_failed';
+  error:
+    | 'session_not_found'
+    | 'manifest_not_frozen'
+    | 'cost_cap_exceeded'
+    | 'content_blocked'
+    | 'build_failed';
   reason?: string;
 }
 
@@ -62,6 +71,7 @@ export function isBuildFailure(result: BuildResult): result is BuildFailure {
  */
 export function createBuildOrchestrator(deps: BuildOrchestratorDeps) {
   const { sessionStore, manifestStore, artifactStore, costGuard, anthropicClient } = deps;
+  const analyticsLogger = deps.analyticsLogger ?? { info: () => {} };
 
   async function handleBuild(sessionId: string, userId: string): Promise<BuildResult> {
     const session = await sessionStore.get(sessionId);
@@ -93,6 +103,22 @@ export function createBuildOrchestrator(deps: BuildOrchestratorDeps) {
     const specResult = compileGenerationSpec(frozenManifest.data);
     if (isCompileSpecFailure(specResult)) {
       return { ok: false, error: 'build_failed', reason: specResult.details.join('; ') };
+    }
+
+    // Content safety screening (Epic 4.17): a real judgment pass on the
+    // manifest's actual intent, run before any generation happens.
+    // screenManifestForSafety always resolves ok: true — it fails open
+    // internally on its own errors (see content-safety-screen.ts), so a
+    // screener outage never blocks the build; only a genuine "not allowed"
+    // decision does.
+    const screening = await screenManifestForSafety({ spec: specResult.spec, anthropicClient });
+    emitAnalyticsEvent(analyticsLogger, {
+      type: 'content_screened',
+      sessionId,
+      allowed: screening.decision.allowed,
+    });
+    if (!screening.decision.allowed) {
+      return { ok: false, error: 'content_blocked', reason: screening.decision.reason };
     }
 
     const repairResult = await runAutoRepairLoop({

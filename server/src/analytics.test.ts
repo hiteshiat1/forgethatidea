@@ -59,6 +59,21 @@ describe('emitAnalyticsEvent (#42)', () => {
     );
   });
 
+  it('logs a content_screened event without leaking the refusal reason text', () => {
+    const logger = { info: vi.fn() };
+
+    emitAnalyticsEvent(logger, {
+      type: 'content_screened',
+      sessionId: 'session-1',
+      allowed: false,
+    });
+
+    expect(logger.info).toHaveBeenCalledWith(
+      { analytics_event: true, type: 'content_screened', sessionId: 'session-1', allowed: false },
+      'analytics.content_screened',
+    );
+  });
+
   it('never includes anything beyond sessionId, event-specific structural fields, and the type', () => {
     const logger = { info: vi.fn() };
 

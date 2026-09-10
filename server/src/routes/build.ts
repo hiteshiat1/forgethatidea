@@ -12,6 +12,7 @@ const ERROR_STATUS: Record<BuildFailure['error'], number> = {
   session_not_found: 404,
   manifest_not_frozen: 409,
   cost_cap_exceeded: 429,
+  content_blocked: 422,
   build_failed: 502,
 };
 

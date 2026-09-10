@@ -325,6 +325,7 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
       artifactStore,
       costGuard,
       anthropicClient: orchestratorAnthropicClient,
+      analyticsLogger: app.log,
     });
     registerBuildRoutes(app, authStore, sessionStore, buildOrchestrator);
   }
