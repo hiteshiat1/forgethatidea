@@ -17,6 +17,7 @@ import {
   createSession,
   triggerBuild,
   sendMessage,
+  refineApp,
   type AuthUser,
   type ApiSession,
 } from './api.js';
@@ -102,11 +103,20 @@ function useSessionBootstrap() {
  * build can be requested. Shows BuildProgress (#73) while in flight and
  * AppRenderer (#68) once code comes back.
  */
-function BuildPanel({ sessionId }: { sessionId: string }) {
+function BuildPanel({
+  sessionId,
+  onAppRoundUsed,
+}: {
+  sessionId: string;
+  /** Bubbles the fresh round count up so the top-bar meter (#86) stays live without a full session refetch. */
+  onAppRoundUsed: (rounds: number) => void;
+}) {
   const [stage, setStage] = useState<BuildStage>('compiling');
   const [error, setError] = useState<string | undefined>(undefined);
   const [code, setCode] = useState<string | null>(null);
   const [building, setBuilding] = useState(false);
+  const [refining, setRefining] = useState(false);
+  const [refineNote, setRefineNote] = useState<string | null>(null);
 
   async function runBuild() {
     setBuilding(true);
@@ -134,10 +144,37 @@ function BuildPanel({ sessionId }: { sessionId: string }) {
     setStage('done');
   }
 
+  async function runRefine(changeRequest: string) {
+    setRefining(true);
+    setRefineNote(null);
+    const result = await refineApp(sessionId, changeRequest);
+    setRefining(false);
+
+    if (!result.ok) {
+      setRefineNote(result.reason ?? result.error);
+      return;
+    }
+
+    if (result.kind === 'clarification') {
+      setRefineNote(result.answer);
+      return;
+    }
+
+    setCode(result.code);
+    onAppRoundUsed(result.rounds);
+  }
+
   if (code) {
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: 'var(--forge-space-2) var(--forge-space-4)' }}>
+        <div
+          style={{
+            padding: 'var(--forge-space-2) var(--forge-space-4)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--forge-space-3)',
+          }}
+        >
           <a
             href={`/api/sessions/${sessionId}/export`}
             download
@@ -145,10 +182,21 @@ function BuildPanel({ sessionId }: { sessionId: string }) {
           >
             Download as .jsx
           </a>
+          {refining && (
+            <span style={{ color: 'var(--forge-slate-300)', fontSize: '0.85rem' }}>
+              Applying your change…
+            </span>
+          )}
+          {refineNote && !refining && (
+            <span style={{ color: 'var(--forge-slate-300)', fontSize: '0.85rem' }}>
+              {refineNote}
+            </span>
+          )}
         </div>
         <div style={{ flex: 1, minHeight: 0 }}>
           <AppRenderer code={code} />
         </div>
+        <ChatInput phase="refine" onSend={runRefine} disabled={refining} />
       </div>
     );
   }
@@ -214,14 +262,29 @@ export function App() {
   function handleTurnEvents(events: TurnEvent[]) {
     setTurnState((prev) => applyTurnEvents(prev, events));
   }
-  // Refinement round state (Epic 2.11) is server-tracked per session; the
-  // agent orchestrator (not yet built) is what will actually call
-  // POST /api/sessions/:id/refine and feed real counts back here. Starts at
-  // zero-of-limit, matching a freshly created session.
-  const [refinement] = useState({
+  // Refinement round state (Epic 2.11, live-wired in #86): seeded once from
+  // the real session (server-tracked, #38) alongside the phase, then kept
+  // current locally as refine-app calls (#76/#85/#89) report fresh round
+  // counts — mirrors the phaseSeeded pattern above rather than refetching
+  // the whole session after every refinement.
+  const [refinement, setRefinement] = useState({
     app: { rounds: 0, limit: 3 },
     marketing: { rounds: 0, limit: 3 },
   });
+  if (sessionState.status === 'ready' && !phaseSeeded) {
+    const { session } = sessionState;
+    setRefinement({
+      app: { rounds: session.appRefinementRounds, limit: session.refinementLimits.app },
+      marketing: {
+        rounds: session.marketingRefinementRounds,
+        limit: session.refinementLimits.marketing,
+      },
+    });
+  }
+
+  function handleAppRoundUsed(rounds: number) {
+    setRefinement((prev) => ({ ...prev, app: { ...prev.app, rounds } }));
+  }
 
   async function handleSend(text: string) {
     if (sessionState.status !== 'ready') return;
@@ -284,7 +347,7 @@ export function App() {
       }
       canvas={
         readyToBuild ? (
-          <BuildPanel sessionId={sessionId} />
+          <BuildPanel sessionId={sessionId} onAppRoundUsed={handleAppRoundUsed} />
         ) : onboarded ? (
           <CanvasPane />
         ) : (

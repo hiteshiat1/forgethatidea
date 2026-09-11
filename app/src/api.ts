@@ -13,11 +13,19 @@ export interface AuthUser {
   email: string;
 }
 
+export interface RefinementLimits {
+  app: number;
+  marketing: number;
+}
+
 export interface ApiSession {
   id: string;
   userId: string | null;
   phase: Phase;
   activeAppVersion: number | null;
+  appRefinementRounds: number;
+  marketingRefinementRounds: number;
+  refinementLimits: RefinementLimits;
 }
 
 export type ApiError = { error: string; [key: string]: unknown };
@@ -75,6 +83,45 @@ export async function triggerBuild(sessionId: string): Promise<BuildResponse> {
   const res = await fetch(`/api/sessions/${sessionId}/build`, {
     method: 'POST',
     credentials: 'include',
+  });
+  return res.json();
+}
+
+export interface RefineAppChangeSuccess {
+  ok: true;
+  kind: 'change_request';
+  code: string;
+  version: number;
+  revertedToOriginal: boolean;
+  rounds: number;
+}
+
+export interface RefineAppClarificationSuccess {
+  ok: true;
+  kind: 'clarification';
+  answer: string;
+}
+
+export type RefineAppSuccess = RefineAppChangeSuccess | RefineAppClarificationSuccess;
+
+export type RefineAppResponse = RefineAppSuccess | { ok: false; error: string; reason?: string };
+
+/**
+ * Applies a targeted change request to the session's active build (#76, with
+ * #85/#89's round-classification and intent-parsing in front of it) —
+ * distinguishes a real code edit (`change_request`) from a free answered
+ * question (`clarification`) so the caller knows whether to expect new code
+ * or just a reply.
+ */
+export async function refineApp(
+  sessionId: string,
+  changeRequest: string,
+): Promise<RefineAppResponse> {
+  const res = await fetch(`/api/sessions/${sessionId}/refine-app`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ changeRequest }),
   });
   return res.json();
 }
