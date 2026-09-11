@@ -160,6 +160,8 @@ describe('createRefineAppOrchestrator (#76)', () => {
     expect(isRefineAppFailure(result)).toBe(true);
     if (isRefineAppFailure(result)) {
       expect(result.error).toBe('refinement_limit_reached');
+      expect(result.rounds).toBe(3);
+      expect(result.limit).toBe(3);
     }
   });
 

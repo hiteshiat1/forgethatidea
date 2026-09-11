@@ -46,12 +46,30 @@ export interface ContentScreenedEvent {
   allowed: boolean;
 }
 
+/**
+ * Fires every time the refinement round-limit gate (#87) actually blocks a
+ * refine-app call — a clean, certain "impression" signal since it's emitted
+ * from the single 429 path, not inferred from client behavior. No paired
+ * "conversion" event exists yet: the only real destination from the gate
+ * today is the always-available free export, and there's no upgrade path to
+ * convert into (Epic 9/11, not built) — inventing one would just be a
+ * misleading metric.
+ */
+export interface GateShownEvent {
+  type: 'gate_shown';
+  sessionId: string;
+  kind: 'app' | 'marketing';
+  rounds: number;
+  limit: number;
+}
+
 export type AnalyticsEvent =
   | PhaseEnteredEvent
   | RefinementUsedEvent
   | SessionConvertedEvent
   | AppExportedEvent
-  | ContentScreenedEvent;
+  | ContentScreenedEvent
+  | GateShownEvent;
 
 export interface AnalyticsLogger {
   info(obj: Record<string, unknown>, msg?: string): void;

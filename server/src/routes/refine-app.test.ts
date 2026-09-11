@@ -43,6 +43,7 @@ function sequencedClient(classificationText: string, secondText: string) {
 }
 
 async function buildTestApp(anthropicClient = clientReturning(EDITED_CODE)) {
+  const analyticsLogger = { info: vi.fn() };
   const app = Fastify({ logger: false });
   await app.register(cookie);
   const authStore = createInMemoryAuthStore();
@@ -57,9 +58,9 @@ async function buildTestApp(anthropicClient = clientReturning(EDITED_CODE)) {
 
   registerAuthRoutes(app, authStore);
   registerSessionRoutes(app, authStore, sessionStore, { app: 3, marketing: 3 });
-  registerRefineAppRoutes(app, authStore, sessionStore, orchestrator);
+  registerRefineAppRoutes(app, authStore, sessionStore, orchestrator, analyticsLogger);
   await app.ready();
-  return { app, sessionStore, artifactStore };
+  return { app, sessionStore, artifactStore, analyticsLogger };
 }
 
 function extractCookie(res: { headers: Record<string, unknown> }): string {
@@ -187,5 +188,34 @@ describe('POST /api/sessions/:id/refine-app', () => {
     });
     const updatedSession = await sessionStore.get(sessionId);
     expect(updatedSession?.activeAppVersion).toBe(1);
+  });
+
+  it('returns 429 and logs a gate_shown analytics event once the round limit is reached (#87)', async () => {
+    const { app, sessionStore, artifactStore, analyticsLogger } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+    const sessionId = await createSessionAs(app, authCookie);
+    await artifactStore.save(sessionId, 'app', { manifestId: 'm1', content: { code: 'old code' } });
+    await sessionStore.update(sessionId, { activeAppVersion: 1, appRefinementRounds: 3 });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${sessionId}/refine-app`,
+      headers: { cookie: authCookie },
+      payload: { changeRequest: 'Add a label.' },
+    });
+
+    expect(res.statusCode).toBe(429);
+    expect(res.json()).toMatchObject({ ok: false, error: 'refinement_limit_reached' });
+    expect(analyticsLogger.info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        analytics_event: true,
+        type: 'gate_shown',
+        sessionId,
+        kind: 'app',
+        rounds: 3,
+        limit: 3,
+      }),
+      'analytics.gate_shown',
+    );
   });
 });

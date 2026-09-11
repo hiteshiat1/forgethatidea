@@ -74,6 +74,30 @@ describe('emitAnalyticsEvent (#42)', () => {
     );
   });
 
+  it('logs a gate_shown event when a refinement round limit gate fires (#87)', () => {
+    const logger = { info: vi.fn() };
+
+    emitAnalyticsEvent(logger, {
+      type: 'gate_shown',
+      sessionId: 'session-1',
+      kind: 'app',
+      rounds: 3,
+      limit: 3,
+    });
+
+    expect(logger.info).toHaveBeenCalledWith(
+      {
+        analytics_event: true,
+        type: 'gate_shown',
+        sessionId: 'session-1',
+        kind: 'app',
+        rounds: 3,
+        limit: 3,
+      },
+      'analytics.gate_shown',
+    );
+  });
+
   it('never includes anything beyond sessionId, event-specific structural fields, and the type', () => {
     const logger = { info: vi.fn() };
 

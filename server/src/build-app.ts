@@ -339,7 +339,7 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
       anthropicClient: orchestratorAnthropicClient,
       refinementLimits,
     });
-    registerRefineAppRoutes(app, authStore, sessionStore, refineAppOrchestrator);
+    registerRefineAppRoutes(app, authStore, sessionStore, refineAppOrchestrator, app.log);
   }
 
   // App export (Epic 4.14): downloads the session's active build. Registered

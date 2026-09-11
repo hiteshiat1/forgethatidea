@@ -51,6 +51,9 @@ export interface RefineAppFailure {
   ok: false;
   error: 'session_not_found' | 'no_build_to_refine' | 'refinement_limit_reached' | 'edit_failed';
   reason?: string;
+  /** Present only for `refinement_limit_reached` — lets the route emit a gate_shown analytics event (#87) without a second lookup. */
+  rounds?: number;
+  limit?: number;
 }
 
 export type RefineAppResult = RefineAppSuccess | RefineAppFailure;
@@ -131,7 +134,12 @@ export function createRefineAppOrchestrator(deps: RefineAppOrchestratorDeps) {
       if (roundResult.error === 'session_not_found') {
         return { ok: false, error: 'session_not_found' };
       }
-      return { ok: false, error: 'refinement_limit_reached' };
+      return {
+        ok: false,
+        error: 'refinement_limit_reached',
+        rounds: roundResult.rounds,
+        limit: refinementLimits.app,
+      };
     }
 
     const editResult = await runDiffEdit({
