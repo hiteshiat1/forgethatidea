@@ -8,6 +8,7 @@ import {
   type RefineAppFailure,
   type createRefineAppOrchestrator,
 } from '../refine-app-orchestrator.js';
+import { emitAnalyticsEvent, type AnalyticsLogger } from '../analytics.js';
 
 const refineAppSchema = z.object({
   changeRequest: z.string().trim().min(1),
@@ -30,6 +31,7 @@ export function registerRefineAppRoutes(
   authStore: AuthStore,
   sessionStore: SessionStore,
   orchestrator: ReturnType<typeof createRefineAppOrchestrator>,
+  analyticsLogger: AnalyticsLogger,
 ) {
   const auth = requireAuth(authStore);
 
@@ -50,6 +52,15 @@ export function registerRefineAppRoutes(
       const result = await orchestrator.handleRefine(request.params.id, parsed.data.changeRequest);
 
       if (isRefineAppFailure(result)) {
+        if (result.error === 'refinement_limit_reached') {
+          emitAnalyticsEvent(analyticsLogger, {
+            type: 'gate_shown',
+            sessionId: request.params.id,
+            kind: 'app',
+            rounds: result.rounds ?? 0,
+            limit: result.limit ?? 0,
+          });
+        }
         return reply.status(ERROR_STATUS[result.error]).send(result);
       }
 

@@ -104,7 +104,17 @@ export interface RefineAppClarificationSuccess {
 
 export type RefineAppSuccess = RefineAppChangeSuccess | RefineAppClarificationSuccess;
 
-export type RefineAppResponse = RefineAppSuccess | { ok: false; error: string; reason?: string };
+export interface RefineAppGateReached {
+  ok: false;
+  error: 'refinement_limit_reached';
+  rounds?: number;
+  limit?: number;
+}
+
+export type RefineAppResponse =
+  | RefineAppSuccess
+  | RefineAppGateReached
+  | { ok: false; error: string; reason?: string };
 
 /**
  * Applies a targeted change request to the session's active build (#76, with
@@ -113,6 +123,10 @@ export type RefineAppResponse = RefineAppSuccess | { ok: false; error: string; r
  * question (`clarification`) so the caller knows whether to expect new code
  * or just a reply.
  */
+export function isGateReached(response: RefineAppResponse): response is RefineAppGateReached {
+  return !response.ok && response.error === 'refinement_limit_reached';
+}
+
 export async function refineApp(
   sessionId: string,
   changeRequest: string,

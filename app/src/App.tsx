@@ -10,6 +10,7 @@ import { ChatInput } from './components/ChatInput.js';
 import { ChatPane, type ChatMessage } from './components/ChatPane.js';
 import { Onboarding } from './components/Onboarding.js';
 import { PhaseRail } from './components/PhaseRail.js';
+import { RefineGate } from './components/RefineGate.js';
 import { StatusIndicators } from './components/StatusIndicators.js';
 import { applyTurnEvents, type TurnEvent } from './turn-events.js';
 import {
@@ -18,6 +19,7 @@ import {
   triggerBuild,
   sendMessage,
   refineApp,
+  isGateReached,
   type AuthUser,
   type ApiSession,
 } from './api.js';
@@ -117,6 +119,7 @@ function BuildPanel({
   const [building, setBuilding] = useState(false);
   const [refining, setRefining] = useState(false);
   const [refineNote, setRefineNote] = useState<string | null>(null);
+  const [gate, setGate] = useState<{ rounds: number; limit: number } | null>(null);
 
   async function runBuild() {
     setBuilding(true);
@@ -149,6 +152,11 @@ function BuildPanel({
     setRefineNote(null);
     const result = await refineApp(sessionId, changeRequest);
     setRefining(false);
+
+    if (isGateReached(result)) {
+      setGate({ rounds: result.rounds ?? 0, limit: result.limit ?? 0 });
+      return;
+    }
 
     if (!result.ok) {
       setRefineNote(result.reason ?? result.error);
@@ -196,7 +204,11 @@ function BuildPanel({
         <div style={{ flex: 1, minHeight: 0 }}>
           <AppRenderer code={code} />
         </div>
-        <ChatInput phase="refine" onSend={runRefine} disabled={refining} />
+        {gate ? (
+          <RefineGate sessionId={sessionId} rounds={gate.rounds} limit={gate.limit} />
+        ) : (
+          <ChatInput phase="refine" onSend={runRefine} disabled={refining} />
+        )}
       </div>
     );
   }
