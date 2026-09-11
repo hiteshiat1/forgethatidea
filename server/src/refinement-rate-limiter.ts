@@ -9,6 +9,15 @@ export interface RateLimitRejected {
 
 export type RateLimitResult = RateLimitAllowed | RateLimitRejected;
 
+/**
+ * Explicit type guard rather than relying on inline `.allowed` narrowing —
+ * this pattern has caused a Vercel-only build failure multiple times this
+ * project even when local tsc is clean on the same TypeScript version.
+ */
+export function isRateLimitRejected(result: RateLimitResult): result is RateLimitRejected {
+  return result.allowed === false;
+}
+
 export interface RefinementRateLimiterOptions {
   /** Minimum interval between two allowed refine-app calls on the same session. */
   cooldownMs: number;

@@ -9,7 +9,7 @@ import { answerClarification } from './refinement-clarification.js';
 import { parseChangeIntent, isAmbiguousIntent } from './refinement-intent-parser.js';
 import { screenRequestForSafety, isUnsafeVerdict } from './refinement-request-safety.js';
 import { checkRequestScope, isMultiChangeVerdict } from './refinement-scope-check.js';
-import { type RefinementRateLimiter } from './refinement-rate-limiter.js';
+import { type RefinementRateLimiter, isRateLimitRejected } from './refinement-rate-limiter.js';
 import {
   recordRefinementRound,
   isRefinementFailure,
@@ -115,7 +115,7 @@ export function createRefineAppOrchestrator(deps: RefineAppOrchestratorDeps) {
     // usage rather than request velocity.
     if (rateLimiter) {
       const rateResult = rateLimiter.check(sessionId);
-      if (!rateResult.allowed) {
+      if (isRateLimitRejected(rateResult)) {
         return { ok: false, error: 'rate_limited', retryAfterMs: rateResult.retryAfterMs };
       }
     }
