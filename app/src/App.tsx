@@ -20,6 +20,7 @@ import {
   sendMessage,
   refineApp,
   isGateReached,
+  getAppArtifact,
   type AuthUser,
   type ApiSession,
 } from './api.js';
@@ -107,9 +108,12 @@ function useSessionBootstrap() {
  */
 function BuildPanel({
   sessionId,
+  appRefinement,
   onAppRoundUsed,
 }: {
   sessionId: string;
+  /** Current app-stream round state (Epic 5.10) — seeds the gate immediately on resume, without waiting for a failed refine call to discover it. */
+  appRefinement: { rounds: number; limit: number };
   /** Bubbles the fresh round count up so the top-bar meter (#86) stays live without a full session refetch. */
   onAppRoundUsed: (rounds: number) => void;
 }) {
@@ -119,7 +123,25 @@ function BuildPanel({
   const [building, setBuilding] = useState(false);
   const [refining, setRefining] = useState(false);
   const [refineNote, setRefineNote] = useState<string | null>(null);
-  const [gate, setGate] = useState<{ rounds: number; limit: number } | null>(null);
+  const [gate, setGate] = useState<{ rounds: number; limit: number } | null>(
+    appRefinement.rounds >= appRefinement.limit ? appRefinement : null,
+  );
+
+  // Session resume (Epic 5.10): the rendered app previously lived only in
+  // this component's local state, so a page reload after a real build had
+  // no way to get the code back short of triggering a brand new build.
+  // Fetches the session's existing active artifact once on mount, if any.
+  useEffect(() => {
+    let cancelled = false;
+    getAppArtifact(sessionId).then((result) => {
+      if (!cancelled && result.ok) {
+        setCode(result.code);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId]);
 
   async function runBuild() {
     setBuilding(true);
@@ -366,7 +388,11 @@ export function App() {
       }
       canvas={
         readyToBuild ? (
-          <BuildPanel sessionId={sessionId} onAppRoundUsed={handleAppRoundUsed} />
+          <BuildPanel
+            sessionId={sessionId}
+            appRefinement={refinement.app}
+            onAppRoundUsed={handleAppRoundUsed}
+          />
         ) : onboarded ? (
           <CanvasPane />
         ) : (

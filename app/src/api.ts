@@ -127,6 +127,24 @@ export function isGateReached(response: RefineAppResponse): response is RefineAp
   return !response.ok && response.error === 'refinement_limit_reached';
 }
 
+export interface AppArtifactSuccess {
+  ok: true;
+  code: string;
+  version: number;
+}
+
+export type AppArtifactResponse = AppArtifactSuccess | { ok: false; error: string };
+
+/**
+ * Fetches the session's existing active build (Epic 5.10) — lets a resumed
+ * session (page reload after a build/refine happened in an earlier tab
+ * session) re-render the app without triggering a brand new build.
+ */
+export async function getAppArtifact(sessionId: string): Promise<AppArtifactResponse> {
+  const res = await fetch(`/api/sessions/${sessionId}/app`, { credentials: 'include' });
+  return res.json();
+}
+
 export async function refineApp(
   sessionId: string,
   changeRequest: string,
