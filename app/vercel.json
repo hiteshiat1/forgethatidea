@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/health",
+      "destination": "https://forge-server-97bf8xbfc-hitesh-gp-apps.vercel.app/health"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "https://forge-server-97bf8xbfc-hitesh-gp-apps.vercel.app/api/:path*"
+    }
+  ]
+}
