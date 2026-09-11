@@ -145,6 +145,43 @@ export async function getAppArtifact(sessionId: string): Promise<AppArtifactResp
   return res.json();
 }
 
+export interface AppVersionSummary {
+  version: number;
+  createdAt: string;
+  changeSummary: string;
+}
+
+export interface AppVersionsList {
+  activeVersion: number | null;
+  versions: AppVersionSummary[];
+}
+
+/** Lists every app build for the version history / revert UI (Epic 5.6). */
+export async function getAppVersions(sessionId: string): Promise<AppVersionsList> {
+  const res = await fetch(`/api/sessions/${sessionId}/app/versions`, { credentials: 'include' });
+  return res.json();
+}
+
+export interface RevertAppVersionSuccess {
+  ok: true;
+  version: number;
+  code: string;
+}
+
+export type RevertAppVersionResponse = RevertAppVersionSuccess | { ok: false; error: string };
+
+/** One-click revert to an earlier app version (Epic 5.6) — never consumes a refinement round. */
+export async function revertAppVersion(
+  sessionId: string,
+  version: number,
+): Promise<RevertAppVersionResponse> {
+  const res = await fetch(`/api/sessions/${sessionId}/app/versions/${version}/revert`, {
+    method: 'POST',
+    credentials: 'include',
+  });
+  return res.json();
+}
+
 export async function refineApp(
   sessionId: string,
   changeRequest: string,

@@ -12,6 +12,7 @@ import { Onboarding } from './components/Onboarding.js';
 import { PhaseRail } from './components/PhaseRail.js';
 import { RefineGate } from './components/RefineGate.js';
 import { StatusIndicators } from './components/StatusIndicators.js';
+import { VersionHistory } from './components/VersionHistory.js';
 import { applyTurnEvents, type TurnEvent } from './turn-events.js';
 import {
   getLatestSession,
@@ -21,6 +22,7 @@ import {
   refineApp,
   isGateReached,
   getAppArtifact,
+  revertAppVersion,
   type AuthUser,
   type ApiSession,
 } from './api.js';
@@ -126,6 +128,8 @@ function BuildPanel({
   const [gate, setGate] = useState<{ rounds: number; limit: number } | null>(
     appRefinement.rounds >= appRefinement.limit ? appRefinement : null,
   );
+  const [versionsRefreshKey, setVersionsRefreshKey] = useState(0);
+  const [reverting, setReverting] = useState(false);
 
   // Session resume (Epic 5.10): the rendered app previously lived only in
   // this component's local state, so a page reload after a real build had
@@ -167,6 +171,19 @@ function BuildPanel({
     setStage('rendering');
     setCode(result.code);
     setStage('done');
+    setVersionsRefreshKey((k) => k + 1);
+  }
+
+  async function handleRevert(version: number) {
+    setReverting(true);
+    const result = await revertAppVersion(sessionId, version);
+    setReverting(false);
+
+    if (result.ok) {
+      setCode(result.code);
+      setGate(null);
+      setVersionsRefreshKey((k) => k + 1);
+    }
   }
 
   async function runRefine(changeRequest: string) {
@@ -192,6 +209,7 @@ function BuildPanel({
 
     setCode(result.code);
     onAppRoundUsed(result.rounds);
+    setVersionsRefreshKey((k) => k + 1);
   }
 
   if (code) {
@@ -233,6 +251,12 @@ function BuildPanel({
         <div style={{ flex: 1, minHeight: 0 }}>
           <AppRenderer code={code} />
         </div>
+        <VersionHistory
+          sessionId={sessionId}
+          refreshKey={versionsRefreshKey}
+          onRevert={handleRevert}
+          reverting={reverting}
+        />
         {gate ? (
           <RefineGate sessionId={sessionId} rounds={gate.rounds} limit={gate.limit} />
         ) : (

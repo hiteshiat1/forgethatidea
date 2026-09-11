@@ -158,7 +158,7 @@ export function createRefineAppOrchestrator(deps: RefineAppOrchestratorDeps) {
 
     const saved = await artifactStore.save(sessionId, 'app', {
       manifestId: activeArtifact.manifestId,
-      content: { code: editResult.code },
+      content: { code: editResult.code, changeSummary: changeRequest },
     });
     await sessionStore.update(sessionId, { activeAppVersion: saved.version });
 

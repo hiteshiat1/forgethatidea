@@ -1,0 +1,73 @@
+/* Version history + revert (Epic 5.6). */
+
+.version-history {
+  padding: 0 var(--forge-space-4);
+}
+
+.version-history__toggle {
+  background: none;
+  border: none;
+  color: var(--forge-signal-amber);
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: var(--forge-space-1) 0;
+}
+
+.version-history__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--forge-slate-200);
+  border-radius: var(--forge-radius-md);
+  background: var(--forge-ink-800);
+}
+
+.version-history__item {
+  padding: var(--forge-space-2) var(--forge-space-3);
+  border-bottom: 1px solid var(--forge-slate-200);
+}
+
+.version-history__item:last-child {
+  border-bottom: none;
+}
+
+.version-history__meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--forge-space-2);
+}
+
+.version-history__version {
+  font-weight: 600;
+  color: var(--forge-slate-100);
+  font-size: 0.85rem;
+}
+
+.version-history__current {
+  color: var(--forge-signal-amber);
+  font-weight: 400;
+}
+
+.version-history__timestamp {
+  color: var(--forge-slate-300);
+  font-size: 0.75rem;
+}
+
+.version-history__summary {
+  margin: var(--forge-space-1) 0;
+  color: var(--forge-slate-300);
+  font-size: 0.85rem;
+}
+
+.version-history__revert {
+  background: none;
+  border: 1px solid var(--forge-signal-amber);
+  color: var(--forge-signal-amber);
+  border-radius: var(--forge-radius-sm);
+  padding: var(--forge-space-1) var(--forge-space-2);
+  font-size: 0.75rem;
+  cursor: pointer;
+}

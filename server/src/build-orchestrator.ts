@@ -144,7 +144,7 @@ export function createBuildOrchestrator(deps: BuildOrchestratorDeps) {
 
     const saved = await artifactStore.save(sessionId, 'app', {
       manifestId: frozenManifest.id,
-      content: { code: repairResult.code },
+      content: { code: repairResult.code, changeSummary: 'Initial build' },
     });
     await sessionStore.update(sessionId, { activeAppVersion: saved.version });
 

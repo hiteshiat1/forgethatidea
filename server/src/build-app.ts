@@ -64,6 +64,7 @@ import { createBuildOrchestrator } from './build-orchestrator.js';
 import { registerBuildRoutes } from './routes/build.js';
 import { registerExportRoutes } from './routes/export.js';
 import { registerAppArtifactRoutes } from './routes/app-artifact.js';
+import { registerAppVersionsRoutes } from './routes/app-versions.js';
 import { createRefineAppOrchestrator } from './refine-app-orchestrator.js';
 import { registerRefineAppRoutes } from './routes/refine-app.js';
 import { registerAgentRoutes } from './routes/agent.js';
@@ -353,6 +354,10 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
   // existing build's code back as JSON, same no-model-call reasoning as
   // export above — registered unconditionally.
   registerAppArtifactRoutes(app, authStore, sessionStore, artifactStore);
+
+  // Version list + revert (Epic 5.6): same no-model-call reasoning as
+  // export/app-artifact above — registered unconditionally.
+  registerAppVersionsRoutes(app, authStore, sessionStore, artifactStore);
 
   return app;
 }
