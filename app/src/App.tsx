@@ -190,6 +190,13 @@ function BuildPanel({
           >
             Download as .jsx
           </a>
+          <a
+            href={`/api/sessions/${sessionId}/export/summary`}
+            download
+            style={{ color: 'var(--forge-signal-amber)', fontSize: '0.9rem' }}
+          >
+            Download plan summary
+          </a>
           {refining && (
             <span style={{ color: 'var(--forge-slate-300)', fontSize: '0.85rem' }}>
               Applying your change…

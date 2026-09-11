@@ -30,6 +30,13 @@ export function RefineGate({ sessionId, rounds, limit }: RefineGateProps) {
         <a className="refine-gate__export" href={`/api/sessions/${sessionId}/export`} download>
           Download as .jsx
         </a>
+        <a
+          className="refine-gate__export"
+          href={`/api/sessions/${sessionId}/export/summary`}
+          download
+        >
+          Download plan summary
+        </a>
         <Button variant="secondary" size="sm" disabled title="Upgrades are coming soon">
           Upgrade (coming soon)
         </Button>

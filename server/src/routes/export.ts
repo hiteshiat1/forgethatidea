@@ -5,7 +5,7 @@ import { type SessionStore } from '../session-store.js';
 import { type ManifestStore } from '../manifest-store.js';
 import { type ArtifactStore } from '../artifact-store.js';
 import { getActiveAppArtifact } from '../artifact-versioning.js';
-import { buildExportedFile } from '../export-app.js';
+import { buildExportedFile, buildPlanSummary } from '../export-app.js';
 import { emitAnalyticsEvent, type AnalyticsLogger } from '../analytics.js';
 
 /**
@@ -60,6 +60,37 @@ export function registerExportRoutes(
         .header('Content-Type', 'text/javascript; charset=utf-8')
         .status(200)
         .send(file);
+    },
+  );
+
+  // Plan summary export (Epic 5.9): the free exit's second half — "app .jsx
+  // + plan summary doc" — as its own downloadable document rather than
+  // folded into the .jsx's comment header, since it's a different kind of
+  // artifact (product plan, not run instructions). Deliberately independent
+  // of whether a build has ever succeeded: only the frozen/latest manifest
+  // is required, so a session that never got past planning can still export
+  // its plan.
+  app.get<{ Params: { id: string } }>(
+    '/api/sessions/:id/export/summary',
+    { preHandler: auth },
+    async (request, reply) => {
+      const session = await sessionStore.get(request.params.id);
+      if (!session || session.userId !== request.userId) {
+        return reply.status(404).send({ error: 'session_not_found' });
+      }
+
+      const manifest = await manifestStore.getLatest(request.params.id);
+      if (!manifest) {
+        return reply.status(409).send({ ok: false, error: 'no_plan_to_summarize' });
+      }
+
+      const summary = buildPlanSummary(manifest.data);
+
+      return reply
+        .header('Content-Disposition', `attachment; filename="plan-summary.txt"`)
+        .header('Content-Type', 'text/plain; charset=utf-8')
+        .status(200)
+        .send(summary);
     },
   );
 }
