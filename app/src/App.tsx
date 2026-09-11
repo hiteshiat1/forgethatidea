@@ -21,6 +21,8 @@ import {
   sendMessage,
   refineApp,
   isGateReached,
+  isRateLimited,
+  isUnsafeRequest,
   getAppArtifact,
   revertAppVersion,
   type AuthUser,
@@ -197,6 +199,19 @@ function BuildPanel({
       return;
     }
 
+    if (isRateLimited(result)) {
+      const seconds = Math.ceil((result.retryAfterMs ?? 0) / 1000);
+      setRefineNote(`Just a moment — try again in ${seconds}s.`);
+      return;
+    }
+
+    if (isUnsafeRequest(result)) {
+      setRefineNote(
+        "That request couldn't be processed — try describing the app change you'd like instead.",
+      );
+      return;
+    }
+
     if (!result.ok) {
       setRefineNote(result.reason ?? result.error);
       return;
@@ -204,6 +219,14 @@ function BuildPanel({
 
     if (result.kind === 'clarification') {
       setRefineNote(result.answer);
+      return;
+    }
+
+    if (result.kind === 'scope_confirmation_needed') {
+      const list = result.detectedChanges.map((c) => `• ${c}`).join('\n');
+      setRefineNote(
+        `That looks like ${result.detectedChanges.length} separate changes:\n${list}\nTry sending them one at a time.`,
+      );
       return;
     }
 
@@ -243,7 +266,13 @@ function BuildPanel({
             </span>
           )}
           {refineNote && !refining && (
-            <span style={{ color: 'var(--forge-slate-300)', fontSize: '0.85rem' }}>
+            <span
+              style={{
+                color: 'var(--forge-slate-300)',
+                fontSize: '0.85rem',
+                whiteSpace: 'pre-line',
+              }}
+            >
               {refineNote}
             </span>
           )}

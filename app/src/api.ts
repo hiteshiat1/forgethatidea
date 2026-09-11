@@ -102,7 +102,21 @@ export interface RefineAppClarificationSuccess {
   answer: string;
 }
 
-export type RefineAppSuccess = RefineAppChangeSuccess | RefineAppClarificationSuccess;
+/**
+ * A bundled "mega-prompt" request (Epic 5.7) — the caller should show the
+ * split-out changes and let the user resend them one at a time; no round
+ * was consumed for this response.
+ */
+export interface RefineAppScopeConfirmationNeeded {
+  ok: true;
+  kind: 'scope_confirmation_needed';
+  detectedChanges: string[];
+}
+
+export type RefineAppSuccess =
+  | RefineAppChangeSuccess
+  | RefineAppClarificationSuccess
+  | RefineAppScopeConfirmationNeeded;
 
 export interface RefineAppGateReached {
   ok: false;
@@ -111,9 +125,23 @@ export interface RefineAppGateReached {
   limit?: number;
 }
 
+export interface RefineAppUnsafeRequest {
+  ok: false;
+  error: 'unsafe_request';
+  reason?: string;
+}
+
+export interface RefineAppRateLimited {
+  ok: false;
+  error: 'rate_limited';
+  retryAfterMs?: number;
+}
+
 export type RefineAppResponse =
   | RefineAppSuccess
   | RefineAppGateReached
+  | RefineAppUnsafeRequest
+  | RefineAppRateLimited
   | { ok: false; error: string; reason?: string };
 
 /**
@@ -125,6 +153,14 @@ export type RefineAppResponse =
  */
 export function isGateReached(response: RefineAppResponse): response is RefineAppGateReached {
   return !response.ok && response.error === 'refinement_limit_reached';
+}
+
+export function isRateLimited(response: RefineAppResponse): response is RefineAppRateLimited {
+  return !response.ok && response.error === 'rate_limited';
+}
+
+export function isUnsafeRequest(response: RefineAppResponse): response is RefineAppUnsafeRequest {
+  return !response.ok && response.error === 'unsafe_request';
 }
 
 export interface AppArtifactSuccess {
