@@ -63,6 +63,7 @@ import {
 import { createBuildOrchestrator } from './build-orchestrator.js';
 import { registerBuildRoutes } from './routes/build.js';
 import { registerExportRoutes } from './routes/export.js';
+import { registerAppArtifactRoutes } from './routes/app-artifact.js';
 import { createRefineAppOrchestrator } from './refine-app-orchestrator.js';
 import { registerRefineAppRoutes } from './routes/refine-app.js';
 import { registerAgentRoutes } from './routes/agent.js';
@@ -347,6 +348,11 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
   // artifact needs no model call, so it doesn't depend on an Anthropic
   // client being configured.
   registerExportRoutes(app, authStore, sessionStore, manifestStore, artifactStore, app.log);
+
+  // Active app artifact (Epic 5.10): lets a resumed session fetch its
+  // existing build's code back as JSON, same no-model-call reasoning as
+  // export above — registered unconditionally.
+  registerAppArtifactRoutes(app, authStore, sessionStore, artifactStore);
 
   return app;
 }
