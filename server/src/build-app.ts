@@ -66,6 +66,7 @@ import { registerExportRoutes } from './routes/export.js';
 import { registerAppArtifactRoutes } from './routes/app-artifact.js';
 import { registerAppVersionsRoutes } from './routes/app-versions.js';
 import { createRefineAppOrchestrator } from './refine-app-orchestrator.js';
+import { createRefinementRateLimiter } from './refinement-rate-limiter.js';
 import { registerRefineAppRoutes } from './routes/refine-app.js';
 import { registerAgentRoutes } from './routes/agent.js';
 
@@ -334,12 +335,15 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
     registerBuildRoutes(app, authStore, sessionStore, buildOrchestrator);
 
     // Refine-app orchestrator (Epic 4.15): targeted diff-edits to the active
-    // build. Same Anthropic-client guard as the build route above.
+    // build. Same Anthropic-client guard as the build route above. The rate
+    // limiter (Epic 5.7) is process-lifetime in-memory state, constructed
+    // once here rather than per-request.
     const refineAppOrchestrator = createRefineAppOrchestrator({
       sessionStore,
       artifactStore,
       anthropicClient: orchestratorAnthropicClient,
       refinementLimits,
+      rateLimiter: createRefinementRateLimiter({ cooldownMs: env.REFINEMENT_RATE_LIMIT_MS }),
     });
     registerRefineAppRoutes(app, authStore, sessionStore, refineAppOrchestrator, app.log);
   }

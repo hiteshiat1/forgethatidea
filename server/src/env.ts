@@ -49,6 +49,11 @@ const envSchema = z.object({
   // pricing model will very likely price them differently.
   FREE_APP_REFINEMENT_LIMIT: z.coerce.number().int().nonnegative().default(3),
   FREE_MARKETING_REFINEMENT_LIMIT: z.coerce.number().int().nonnegative().default(3),
+
+  // Refinement abuse guard (Epic 5.7): minimum interval between two
+  // refine-app calls on the same session — catches rapid-fire/scripted
+  // spam without affecting normal human pace between refinements.
+  REFINEMENT_RATE_LIMIT_MS: z.coerce.number().int().nonnegative().default(3000),
 });
 
 export type Env = z.infer<typeof envSchema>;

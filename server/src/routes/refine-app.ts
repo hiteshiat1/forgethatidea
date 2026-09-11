@@ -19,6 +19,8 @@ const ERROR_STATUS: Record<RefineAppFailure['error'], number> = {
   no_build_to_refine: 409,
   refinement_limit_reached: 429,
   edit_failed: 502,
+  rate_limited: 429,
+  unsafe_request: 422,
 };
 
 /**
@@ -60,6 +62,9 @@ export function registerRefineAppRoutes(
             rounds: result.rounds ?? 0,
             limit: result.limit ?? 0,
           });
+        }
+        if (result.error === 'rate_limited' && result.retryAfterMs !== undefined) {
+          reply.header('Retry-After', Math.ceil(result.retryAfterMs / 1000));
         }
         return reply.status(ERROR_STATUS[result.error]).send(result);
       }
