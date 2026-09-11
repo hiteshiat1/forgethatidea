@@ -1,3 +1,5 @@
+import type { BuildManifest } from '@forge/shared';
+
 /**
  * App download/export (Epic 4.14): wraps the generated code in a single
  * downloadable .jsx file with a prepended comment-block README explaining
@@ -28,4 +30,48 @@ export function buildExportedFile(code: string, productName: string): string {
 
 `;
   return `${readme}${code}`;
+}
+
+/**
+ * Plan summary export (Epic 5.9): a plain-text companion to the .jsx
+ * download — "the free exit always includes app + plan summary" per the
+ * issue. A second, separate document rather than folded into the .jsx's own
+ * comment header, since it's a different kind of artifact (product plan,
+ * not run instructions) and needs to stand alone as something shareable on
+ * its own. Kept a plain single text document, not a zip, for the same
+ * reason #75 avoided one: the file travels intact wherever it's copied,
+ * with no bundling dependency.
+ */
+export function buildPlanSummary(manifest: BuildManifest): string {
+  const entities = manifest.entities
+    .map((entity) => `- ${entity.name} (${entity.fields.map((f) => f.name).join(', ')})`)
+    .join('\n');
+  const screens = manifest.screens
+    .map((screen) => `- ${screen.name}: ${screen.purpose}`)
+    .join('\n');
+  const roles = manifest.roles.map((role) => `- ${role}`).join('\n');
+  const keyActions = manifest.keyActions.map((action) => `- ${action}`).join('\n');
+
+  return `${manifest.productName} — Plan Summary
+Built with Forge (forgethatidea.com)
+
+Who it's for
+${manifest.icp}
+
+Entities
+${entities}
+
+Screens
+${screens}
+
+Roles
+${roles}
+
+Key actions
+${keyActions}
+
+Branding
+- Accent color: ${manifest.branding.accentColor}
+- Tone: ${manifest.branding.tone}
+`;
 }

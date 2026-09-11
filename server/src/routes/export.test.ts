@@ -161,3 +161,65 @@ describe('GET /api/sessions/:id/export', () => {
     expect(res.body).toContain('HabitLoop');
   });
 });
+
+describe('GET /api/sessions/:id/export/summary', () => {
+  it('rejects an anonymous request', async () => {
+    const { app } = await buildTestApp();
+    const res = await app.inject({ method: 'GET', url: '/api/sessions/whatever/export/summary' });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('404s for a nonexistent session', async () => {
+    const { app } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/sessions/nonexistent/export/summary',
+      headers: { cookie: authCookie },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('returns 409 when there is no plan to summarize yet', async () => {
+    const { app } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+    const sessionId = await createSessionAs(app, authCookie);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/sessions/${sessionId}/export/summary`,
+      headers: { cookie: authCookie },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toEqual({ ok: false, error: 'no_plan_to_summarize' });
+  });
+
+  it('downloads the plan summary as a text file, available even without a build (#93)', async () => {
+    const { app, manifestStore } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+    const sessionId = await createSessionAs(app, authCookie);
+    await manifestStore.save(sessionId, {
+      schemaVersion: 1,
+      productName: 'HabitLoop',
+      icp: 'people building daily habits',
+      entities: [{ name: 'Habit', fields: [{ name: 'title', type: 'string' }] }],
+      screens: [{ name: 'Habit list', purpose: 'see all habits' }],
+      roles: ['user'],
+      keyActions: ['create habit'],
+      branding: { accentColor: '#2E7D32', tone: 'encouraging' },
+      references: { researchCardIds: [] },
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/sessions/${sessionId}/export/summary`,
+      headers: { cookie: authCookie },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-disposition']).toContain('attachment');
+    expect(res.body).toContain('HabitLoop');
+    expect(res.body).toContain('Habit');
+    expect(res.body.toLowerCase()).toContain('forgethatidea.com');
+  });
+});
