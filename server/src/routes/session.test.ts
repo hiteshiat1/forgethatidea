@@ -58,6 +58,24 @@ describe('POST /api/sessions', () => {
     expect(body.userId).toEqual(expect.any(String));
     await app.close();
   });
+
+  it('includes the configured refinement limits so the client can render a live meter (#86)', async () => {
+    const { app } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: authCookie },
+    });
+
+    expect(res.json()).toMatchObject({
+      appRefinementRounds: 0,
+      marketingRefinementRounds: 0,
+      refinementLimits: { app: 3, marketing: 3 },
+    });
+    await app.close();
+  });
 });
 
 describe('GET /api/sessions/latest', () => {
@@ -101,6 +119,26 @@ describe('GET /api/sessions/latest', () => {
     });
 
     expect(res.json()).toMatchObject({ id: sessionId, phase: 'sources' });
+    await app.close();
+  });
+
+  it('includes refinementLimits on resume (#86)', async () => {
+    const { app } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: authCookie },
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/sessions/latest',
+      headers: { cookie: authCookie },
+    });
+
+    expect(res.json()).toMatchObject({ refinementLimits: { app: 3, marketing: 3 } });
     await app.close();
   });
 });

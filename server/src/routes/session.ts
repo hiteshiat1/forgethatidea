@@ -44,12 +44,22 @@ export function registerSessionRoutes(
 ) {
   const auth = requireAuth(authStore);
 
+  // Static per the current (no billing system yet, #92) free-tier config —
+  // attached to every session response so the client can render a live
+  // "N/limit" meter (#86) without a second round-trip just to learn the
+  // ceiling.
+  function withRefinementLimits<T extends object>(
+    session: T,
+  ): T & { refinementLimits: RefinementLimits } {
+    return { ...session, refinementLimits };
+  }
+
   app.post(
     '/api/sessions',
     { preHandler: auth },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const session = await store.create(request.userId!);
-      return reply.status(201).send(session);
+      return reply.status(201).send(withRefinementLimits(session));
     },
   );
 
@@ -61,7 +71,7 @@ export function registerSessionRoutes(
     { preHandler: auth },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const [latest] = await store.listByUser(request.userId!);
-      return reply.status(200).send(latest ?? null);
+      return reply.status(200).send(latest ? withRefinementLimits(latest) : null);
     },
   );
 
@@ -73,7 +83,7 @@ export function registerSessionRoutes(
       if (!session || session.userId !== request.userId) {
         return reply.status(404).send({ error: 'session_not_found' });
       }
-      return reply.status(200).send(session);
+      return reply.status(200).send(withRefinementLimits(session));
     },
   );
 
@@ -125,7 +135,7 @@ export function registerSessionRoutes(
       }
 
       const updated = await store.update(request.params.id, parsed.data);
-      return reply.status(200).send(updated);
+      return reply.status(200).send(withRefinementLimits(updated!));
     },
   );
 
