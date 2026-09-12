@@ -136,3 +136,24 @@ export const artifacts = pgTable('artifacts', {
   storageKey: text('storage_key'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * Analytics event log (Epic 5.11): a durable, queryable record of every
+ * event emitted via analytics.ts's `emitAnalyticsEvent`, alongside (not
+ * instead of) the existing Pino log line — the log line stays for
+ * operational visibility/tailing, this table is what makes funnel metrics
+ * (rounds-used distribution, gate hit rate, gate→export rate) queryable
+ * rather than requiring log aggregation infra that doesn't exist here.
+ * `sessionId` is deliberately nullable+unconstrained (no FK) since a
+ * session can be deleted while its historical analytics should still be
+ * queryable — funnel analysis outliving the session it came from is the
+ * whole point.
+ */
+export const analyticsEvents = pgTable('analytics_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  type: text('type').notNull(),
+  sessionId: text('session_id').notNull(),
+  /** The event's own fields (kind, rounds, limit, version, etc.) — shape varies per type, same union as analytics.ts's AnalyticsEvent. */
+  payload: jsonb('payload').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});

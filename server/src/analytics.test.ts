@@ -59,6 +59,28 @@ describe('emitAnalyticsEvent (#42)', () => {
     );
   });
 
+  it('logs an app_exported event with fromGate when exported from a gated state (#95)', () => {
+    const logger = { info: vi.fn() };
+
+    emitAnalyticsEvent(logger, {
+      type: 'app_exported',
+      sessionId: 'session-1',
+      version: 3,
+      fromGate: true,
+    });
+
+    expect(logger.info).toHaveBeenCalledWith(
+      {
+        analytics_event: true,
+        type: 'app_exported',
+        sessionId: 'session-1',
+        version: 3,
+        fromGate: true,
+      },
+      'analytics.app_exported',
+    );
+  });
+
   it('logs a content_screened event without leaking the refusal reason text', () => {
     const logger = { info: vi.fn() };
 

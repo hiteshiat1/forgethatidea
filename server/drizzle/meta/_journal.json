@@ -57,6 +57,13 @@
       "when": 1788801763448,
       "tag": "0007_dark_pet_avengers",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789226903925,
+      "tag": "0008_chilly_captain_cross",
+      "breakpoints": true
     }
   ]
 }

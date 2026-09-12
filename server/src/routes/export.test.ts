@@ -26,7 +26,15 @@ async function buildTestApp() {
 
   registerAuthRoutes(app, authStore);
   registerSessionRoutes(app, authStore, sessionStore, { app: 3, marketing: 3 });
-  registerExportRoutes(app, authStore, sessionStore, manifestStore, artifactStore, analyticsLogger);
+  registerExportRoutes(
+    app,
+    authStore,
+    sessionStore,
+    manifestStore,
+    artifactStore,
+    analyticsLogger,
+    { app: 3, marketing: 3 },
+  );
   await app.ready();
   return { app, sessionStore, manifestStore, artifactStore, analyticsLogger };
 }
@@ -129,6 +137,32 @@ describe('GET /api/sessions/:id/export', () => {
         type: 'app_exported',
         sessionId,
         version: 1,
+        fromGate: false,
+      }),
+      'analytics.app_exported',
+    );
+  });
+
+  it('tags the export event with fromGate:true when the app round limit was already reached (#95)', async () => {
+    const { app, sessionStore, artifactStore, analyticsLogger } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+    const sessionId = await createSessionAs(app, authCookie);
+    await artifactStore.save(sessionId, 'app', { manifestId: 'm1', content: { code: CODE } });
+    await sessionStore.update(sessionId, { activeAppVersion: 1, appRefinementRounds: 3 });
+
+    await app.inject({
+      method: 'GET',
+      url: `/api/sessions/${sessionId}/export`,
+      headers: { cookie: authCookie },
+    });
+
+    expect(analyticsLogger.info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        analytics_event: true,
+        type: 'app_exported',
+        sessionId,
+        version: 1,
+        fromGate: true,
       }),
       'analytics.app_exported',
     );
