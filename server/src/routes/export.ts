@@ -7,6 +7,7 @@ import { type ArtifactStore } from '../artifact-store.js';
 import { getActiveAppArtifact } from '../artifact-versioning.js';
 import { buildExportedFile, buildPlanSummary } from '../export-app.js';
 import { emitAnalyticsEvent, type AnalyticsLogger } from '../analytics.js';
+import type { RefinementLimits } from '../refinement-tracker.js';
 
 /**
  * App download/export route (Epic 4.14): downloads the session's active
@@ -23,6 +24,7 @@ export function registerExportRoutes(
   manifestStore: ManifestStore,
   artifactStore: ArtifactStore,
   analyticsLogger: AnalyticsLogger,
+  refinementLimits: RefinementLimits,
 ) {
   const auth = requireAuth(authStore);
 
@@ -53,6 +55,7 @@ export function registerExportRoutes(
         type: 'app_exported',
         sessionId: request.params.id,
         version: artifact.version,
+        fromGate: session.appRefinementRounds >= refinementLimits.app,
       });
 
       return reply

@@ -69,6 +69,12 @@ import { createRefineAppOrchestrator } from './refine-app-orchestrator.js';
 import { createRefinementRateLimiter } from './refinement-rate-limiter.js';
 import { registerRefineAppRoutes } from './routes/refine-app.js';
 import { registerAgentRoutes } from './routes/agent.js';
+import {
+  createDbAnalyticsStore,
+  createInMemoryAnalyticsStore,
+  createPersistingAnalyticsLogger,
+  type AnalyticsStore,
+} from './analytics-store.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -113,6 +119,8 @@ export interface BuildAppDeps {
   orchestratorAnthropicClient?: OrchestratorAnthropicClient;
   /** Generated-artifact persistence (Epic 4.13). Defaults to DB-backed when `db` is available, else in-memory. */
   artifactStore?: ArtifactStore;
+  /** Durable analytics event log (Epic 5.11). Defaults to DB-backed when `db` is available, else in-memory. */
+  analyticsStore?: AnalyticsStore;
 }
 
 /**
@@ -192,6 +200,14 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
   // present so the server still boots without one in dev/test.
   const db = deps.db ?? (env.DATABASE_URL ? createDbClient(env.DATABASE_URL) : undefined);
   if (db) app.decorate('db', db);
+
+  // Durable analytics event log (Epic 5.11): DB-backed when a db client is
+  // available, otherwise in-memory (dev/test) — same convention as the
+  // other stores above. Wraps app.log so every existing analyticsLogger
+  // call site persists automatically without any change to that call site.
+  const analyticsStore =
+    deps.analyticsStore ?? (db ? createDbAnalyticsStore(db) : createInMemoryAnalyticsStore());
+  const analyticsLogger = createPersistingAnalyticsLogger(analyticsStore, app.log);
 
   // Onboarding schema + persistence (Epic 1.4).
   registerOnboardingRoutes(app, deps.onboardingStore ?? createInMemoryOnboardingStore());
@@ -309,7 +325,7 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
       costGuard,
       anthropicClient: orchestratorAnthropicClient,
       extraTools: { web_search: webSearchTool.web_search },
-      analyticsLogger: app.log,
+      analyticsLogger,
     });
     registerAgentRoutes(app, authStore, sessionStore, orchestrator);
   }
@@ -330,7 +346,7 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
       artifactStore,
       costGuard,
       anthropicClient: orchestratorAnthropicClient,
-      analyticsLogger: app.log,
+      analyticsLogger,
     });
     registerBuildRoutes(app, authStore, sessionStore, buildOrchestrator);
 
@@ -345,14 +361,22 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
       refinementLimits,
       rateLimiter: createRefinementRateLimiter({ cooldownMs: env.REFINEMENT_RATE_LIMIT_MS }),
     });
-    registerRefineAppRoutes(app, authStore, sessionStore, refineAppOrchestrator, app.log);
+    registerRefineAppRoutes(app, authStore, sessionStore, refineAppOrchestrator, analyticsLogger);
   }
 
   // App export (Epic 4.14): downloads the session's active build. Registered
   // unconditionally, unlike the build route — exporting an already-built
   // artifact needs no model call, so it doesn't depend on an Anthropic
   // client being configured.
-  registerExportRoutes(app, authStore, sessionStore, manifestStore, artifactStore, app.log);
+  registerExportRoutes(
+    app,
+    authStore,
+    sessionStore,
+    manifestStore,
+    artifactStore,
+    analyticsLogger,
+    refinementLimits,
+  );
 
   // Active app artifact (Epic 5.10): lets a resumed session fetch its
   // existing build's code back as JSON, same no-model-call reasoning as

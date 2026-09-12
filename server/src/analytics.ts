@@ -38,6 +38,8 @@ export interface AppExportedEvent {
   sessionId: string;
   /** The artifact version exported (Epic 4.13/4.14) — lets export rate be tracked per build attempt, not just per session. */
   version: number;
+  /** True when this export happened while the session was in a gated state (Epic 5.11's "gate→export rate") — the route sets this from the session's own round counters at export time, not from any client-supplied flag. */
+  fromGate?: boolean;
 }
 
 export interface ContentScreenedEvent {
