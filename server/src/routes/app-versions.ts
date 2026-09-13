@@ -5,6 +5,7 @@ import { type AuthStore } from '../auth/auth-store.js';
 import { type SessionStore } from '../session-store.js';
 import { type ArtifactStore } from '../artifact-store.js';
 import { revertToAppVersion, isArtifactVersioningFailure } from '../artifact-versioning.js';
+import { compileForPreview } from '../generation-validation.js';
 
 const versionParamSchema = z.object({
   id: z.string(),
@@ -80,9 +81,12 @@ export function registerAppVersionsRoutes(
       }
 
       const artifact = await artifactStore.getVersion(parsed.data.id, 'app', result.version);
-      const { code } = artifact!.content as { code: string };
+      const { code, compiledCode } = artifact!.content as { code: string; compiledCode?: string };
+      const resolvedCompiledCode = compiledCode ?? (await compileForPreview(code));
 
-      return reply.status(200).send({ ok: true, version: result.version, code });
+      return reply
+        .status(200)
+        .send({ ok: true, version: result.version, code, compiledCode: resolvedCompiledCode });
     },
   );
 }

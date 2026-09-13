@@ -22,6 +22,8 @@ export interface AutoRepairLoopInput {
 export interface AutoRepairSuccess {
   ok: true;
   code: string;
+  /** Pre-transpiled plain JS from the same validation pass — lets the preview iframe run with no client-side eval (see generation-validation.ts). */
+  compiledCode: string;
   /** How many repair rounds it took beyond the initial attempt — 0 means it validated cleanly first try. Tracked as a generation-quality metric. */
   repairRounds: number;
   inputTokens: number;
@@ -88,6 +90,7 @@ export async function runAutoRepairLoop(input: AutoRepairLoopInput): Promise<Aut
       return {
         ok: true,
         code: generation.code,
+        compiledCode: validation.compiledCode,
         repairRounds: round,
         inputTokens: generation.inputTokens,
         outputTokens: generation.outputTokens,

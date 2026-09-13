@@ -111,6 +111,7 @@ describe('createRefineAppOrchestrator (#76)', () => {
     if (!isRefineAppFailure(result) && result.kind === 'change_request') {
       expect(result.code).toBe(EDITED_CODE);
       expect(result.version).toBe(2);
+      expect(result.compiledCode).toContain('ForgeCompiledApp');
     }
     const updatedSession = await deps.sessionStore.get(session.id);
     expect(updatedSession?.activeAppVersion).toBe(2);

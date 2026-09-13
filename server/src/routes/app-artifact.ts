@@ -4,6 +4,7 @@ import { type AuthStore } from '../auth/auth-store.js';
 import { type SessionStore } from '../session-store.js';
 import { type ArtifactStore } from '../artifact-store.js';
 import { getActiveAppArtifact } from '../artifact-versioning.js';
+import { compileForPreview } from '../generation-validation.js';
 
 /**
  * Active app artifact route (Epic 5.10): returns the session's current
@@ -41,8 +42,16 @@ export function registerAppArtifactRoutes(
         return reply.status(409).send({ ok: false, error: 'no_build_to_resume' });
       }
 
-      const { code } = artifact.content as { code: string };
-      return reply.status(200).send({ ok: true, code, version: artifact.version });
+      const { code, compiledCode } = artifact.content as { code: string; compiledCode?: string };
+
+      // Legacy artifacts saved before compiledCode existed have no
+      // precompiled JS stored — compile on the fly rather than ever
+      // sending raw JSX to the preview iframe for it to eval itself.
+      const resolvedCompiledCode = compiledCode ?? (await compileForPreview(code));
+
+      return reply
+        .status(200)
+        .send({ ok: true, code, compiledCode: resolvedCompiledCode, version: artifact.version });
     },
   );
 }

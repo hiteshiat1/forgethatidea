@@ -10,7 +10,22 @@ describe('validateGeneratedCode (#66)', () => {
       }
     `;
     const result = await validateGeneratedCode(code);
-    expect(result).toEqual({ ok: true });
+    expect(result.ok).toBe(true);
+  });
+
+  it('returns the esbuild-compiled plain JS on success, so the browser never needs to transpile JSX itself (#eval-csp-fix)', async () => {
+    const code = `export default function App() { return <div>hi</div>; }`;
+    const result = await validateGeneratedCode(code);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.compiledCode).not.toContain('<div>');
+      expect(result.compiledCode).toContain('React.createElement');
+      // IIFE assigned to a global, not ESM `export` syntax — a plain
+      // <script> tag in the sandboxed iframe can run this with no
+      // transpilation/eval step at all.
+      expect(result.compiledCode).not.toMatch(/\bexport\s+default\b/);
+      expect(result.compiledCode).toContain('ForgeCompiledApp');
+    }
   });
 
   it('fails with compile_error on syntactically invalid code', async () => {

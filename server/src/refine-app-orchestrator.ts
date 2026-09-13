@@ -34,6 +34,8 @@ export interface RefineAppChangeSuccess {
   ok: true;
   kind: 'change_request';
   code: string;
+  /** Pre-transpiled plain JS for `code` (see generation-validation.ts) — lets the preview iframe run with no client-side eval. */
+  compiledCode: string;
   version: number;
   revertedToOriginal: boolean;
   rounds: number;
@@ -228,7 +230,11 @@ export function createRefineAppOrchestrator(deps: RefineAppOrchestratorDeps) {
 
     const saved = await artifactStore.save(sessionId, 'app', {
       manifestId: activeArtifact.manifestId,
-      content: { code: editResult.code, changeSummary: changeRequest },
+      content: {
+        code: editResult.code,
+        compiledCode: editResult.compiledCode,
+        changeSummary: changeRequest,
+      },
     });
     await sessionStore.update(sessionId, { activeAppVersion: saved.version });
 
@@ -236,6 +242,7 @@ export function createRefineAppOrchestrator(deps: RefineAppOrchestratorDeps) {
       ok: true,
       kind: 'change_request',
       code: editResult.code,
+      compiledCode: editResult.compiledCode,
       version: saved.version,
       revertedToOriginal: editResult.revertedToOriginal,
       rounds: roundResult.rounds,

@@ -64,6 +64,7 @@ describe('runDiffEdit (#76)', () => {
       expect(result.code).toBe(VALID_EDITED_CODE);
       expect(result.revertedToOriginal).toBe(false);
       expect(result.repairRounds).toBe(0);
+      expect(result.compiledCode).toContain('ForgeCompiledApp');
     }
     expect(client.streamMessage).toHaveBeenCalledTimes(1);
   });
@@ -128,6 +129,7 @@ describe('runDiffEdit (#76)', () => {
     if (!isDiffEditFailure(result)) {
       expect(result.code).toBe(CURRENT_CODE);
       expect(result.revertedToOriginal).toBe(true);
+      expect(result.compiledCode).toContain('ForgeCompiledApp');
     }
     // Initial attempt + 1 repair round = 2 total calls.
     expect(client.streamMessage).toHaveBeenCalledTimes(2);

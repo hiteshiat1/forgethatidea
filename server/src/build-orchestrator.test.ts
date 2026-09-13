@@ -117,11 +117,15 @@ describe('createBuildOrchestrator (#75)', () => {
     if (!isBuildFailure(result)) {
       expect(result.code).toBe(VALID_CODE);
       expect(result.version).toBe(1);
+      expect(result.compiledCode).toContain('ForgeCompiledApp');
     }
     const updatedSession = await deps.sessionStore.get(session.id);
     expect(updatedSession?.activeAppVersion).toBe(1);
     const artifact = await deps.artifactStore.getVersion(session.id, 'app', 1);
     expect(artifact?.content).toMatchObject({ code: VALID_CODE });
+    expect((artifact?.content as { compiledCode: string }).compiledCode).toContain(
+      'ForgeCompiledApp',
+    );
   });
 
   it('links the saved artifact to the frozen manifest version', async () => {

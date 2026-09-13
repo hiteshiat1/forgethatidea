@@ -46,6 +46,7 @@ describe('runAutoRepairLoop (#67)', () => {
     if (!isAutoRepairFailure(result)) {
       expect(result.code).toBe(VALID_CODE);
       expect(result.repairRounds).toBe(0);
+      expect(result.compiledCode).toContain('ForgeCompiledApp');
     }
     expect(client.streamMessage).toHaveBeenCalledTimes(1);
   });

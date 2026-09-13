@@ -3,31 +3,39 @@ import tokensCss from '@forge/shared/tokens.css?raw';
 import '../styles/app-renderer.css';
 
 export interface AppRendererProps {
-  /** Generated app source code (Epic 4.4-4.6) — a single self-contained JSX file, already validated. */
-  code: string;
+  /** Pre-transpiled plain JS (esbuild, IIFE assigned to the `ForgeCompiledApp` global) — see server/src/generation-validation.ts. */
+  compiledCode: string;
 }
 
 const REACT_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js';
 const REACT_DOM_CDN =
   'https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js';
-const BABEL_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.26.4/babel.min.js';
 
 /**
- * Builds the sandboxed iframe's full HTML document: React/ReactDOM/Babel
- * standalone loaded from a CDN (no local build-time dependency, per Epic
- * 4.7's scope), the Forge design tokens inlined so generated apps render
- * on-brand without a network fetch, and the generated code dropped straight
- * into a `<script type="text/babel">` tag — Babel standalone's own
- * in-browser loader finds and transpiles those automatically before
- * execution, so there's no manual eval/new Function step here at all; the
- * browser just runs ordinary transpiled `<script>` output.
+ * Builds the sandboxed iframe's full HTML document: React/ReactDOM loaded
+ * from a CDN (no local build-time dependency, per Epic 4.7's scope), the
+ * Forge design tokens inlined so generated apps render on-brand without a
+ * network fetch, and the already-compiled generated code dropped straight
+ * into an ordinary `<script>` tag.
+ *
+ * This used to run Babel Standalone in the browser (a `<script
+ * type="text/babel">` tag), transpiling raw JSX at runtime — which requires
+ * `eval()`/`new Function()` internally. Browsers block that under a strict
+ * `script-src` CSP, and a `srcDoc` iframe unconditionally inherits its
+ * parent document's CSP (there is no sandbox-attribute opt-out — adding
+ * `allow-same-origin` would lift it, but that also hands the frame the
+ * parent's real origin, i.e. its cookies/session, defeating the sandbox
+ * entirely). The fix is to never need runtime JSX transpilation in the
+ * browser at all: the server now compiles JSX to plain JS once (esbuild)
+ * and this component just runs that. `sandbox="allow-scripts"` alone is
+ * enough for a plain script tag.
  *
  * A window.onerror/unhandledrejection handler reports a runtime error (via
  * postMessage) as a banner inside the frame rather than letting it do
  * anything that could escape the sandbox or crash the host page.
  */
-function buildSandboxDocument(code: string): string {
-  const escapedCode = code.replace(/<\/script>/gi, '<\\/script>');
+function buildSandboxDocument(compiledCode: string): string {
+  const escapedCode = compiledCode.replace(/<\/script>/gi, '<\\/script>');
 
   return `<!doctype html>
 <html>
@@ -41,7 +49,6 @@ function buildSandboxDocument(code: string): string {
 </style>
 <script src="${REACT_CDN}"></script>
 <script src="${REACT_DOM_CDN}"></script>
-<script src="${BABEL_CDN}"></script>
 <script>
 function reportError(message) {
   var banner = document.getElementById('forge-error-banner');
@@ -58,11 +65,11 @@ window.addEventListener('unhandledrejection', function (event) {
 <body>
 <div id="forge-error-banner"></div>
 <div id="forge-generated-root"></div>
-<script type="text/babel" data-presets="react">
+<script>
 ${escapedCode}
 
 try {
-  var ForgeGeneratedComponent = (typeof App !== 'undefined' && App) || (typeof exports !== 'undefined' && exports.default);
+  var ForgeGeneratedComponent = (typeof ForgeCompiledApp !== 'undefined' && ForgeCompiledApp && ForgeCompiledApp.default);
   if (typeof ForgeGeneratedComponent !== 'function') {
     throw new Error('Generated code has no usable default-exported component.');
   }
@@ -86,9 +93,9 @@ try {
  * the generated app from doing anything more than showing a banner inside
  * the frame — Forge itself is structurally unaffected either way.
  */
-export function AppRenderer({ code }: AppRendererProps) {
+export function AppRenderer({ compiledCode }: AppRendererProps) {
   const [isFullScreen, setIsFullScreen] = useState(false);
-  const srcDoc = useMemo(() => buildSandboxDocument(code), [code]);
+  const srcDoc = useMemo(() => buildSandboxDocument(compiledCode), [compiledCode]);
 
   return (
     <div className={`app-renderer${isFullScreen ? ' app-renderer--fullscreen' : ''}`}>

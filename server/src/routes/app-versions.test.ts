@@ -155,9 +155,40 @@ describe('POST /api/sessions/:id/app/versions/:version/revert (#90)', () => {
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ ok: true, version: 1, code: 'v1 code' });
+    expect(res.json().code).toBe('v1 code');
+    // 'v1 code' doesn't parse as JS — the fallback-to-raw-source path
+    // (compileForPreview) kicks in rather than throwing.
+    expect(res.json().compiledCode).toBe('v1 code');
     const updatedSession = await sessionStore.get(sessionId);
     expect(updatedSession?.activeAppVersion).toBe(1);
     expect(updatedSession?.appRefinementRounds).toBe(1);
+  });
+
+  it('returns the stored compiledCode for a version saved with one, rather than recompiling (#eval-csp-fix)', async () => {
+    const { app, sessionStore, artifactStore } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+    const sessionId = await createSessionAs(app, authCookie);
+    await artifactStore.save(sessionId, 'app', {
+      manifestId: 'm1',
+      content: {
+        code: 'export default function App() { return null; }',
+        compiledCode: 'var ForgeCompiledApp = {};',
+        changeSummary: 'Initial build',
+      },
+    });
+    await artifactStore.save(sessionId, 'app', {
+      manifestId: 'm1',
+      content: { code: 'v2 code', changeSummary: 'Make the header blue' },
+    });
+    await sessionStore.update(sessionId, { activeAppVersion: 2 });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${sessionId}/app/versions/1/revert`,
+      headers: { cookie: authCookie },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().compiledCode).toBe('var ForgeCompiledApp = {};');
   });
 });
