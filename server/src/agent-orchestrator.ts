@@ -97,6 +97,19 @@ const DEFAULT_KEEP_RECENT_MESSAGES = 30;
 const MAX_CONSECUTIVE_FAILED_ROUNDS = 2;
 
 /**
+ * Reminder injected before the last tool round (Epic 2.13 follow-up): a
+ * production incident showed the model can make several rounds of genuinely
+ * successful tool calls (get_manifest, update_manifest, ...) without ever
+ * emitting a text reply, silently burning the whole maxToolRounds budget and
+ * leaving the user staring at the generic fallback with no real answer. This
+ * is appended as an extra text block alongside the final round's tool
+ * results, giving the model one explicit chance to wrap up in text before
+ * the budget runs out, rather than finding out only after the fact.
+ */
+const WRAP_UP_NUDGE =
+  "[system reminder: this is your final tool round for this turn — stop calling tools now and respond to the user in plain text with what you've learned or done so far.]";
+
+/**
  * Agent error recovery & guardrails (Epic 2.13): the single fallback shown
  * whenever the turn can't reach a real reply — a model API failure, or the
  * agent stuck repeatedly failing the same tool call. Always the same
@@ -291,14 +304,21 @@ export function createAgentOrchestrator(deps: AgentOrchestratorDeps) {
       const toolResults = await Promise.all(
         toolUseBlocks.map((block) => dispatcher.dispatch(block)),
       );
+      const toolResultBlocks = toolResults.map((r) => ({
+        type: 'tool_result' as const,
+        tool_use_id: r.toolUseId,
+        content: JSON.stringify(r.content),
+        is_error: r.isError,
+      }));
+      // The upcoming round is the last one this turn gets — give the model
+      // one explicit heads-up to stop calling tools and reply in text now,
+      // rather than silently running out of budget (see WRAP_UP_NUDGE).
+      const isLastRoundNext = round + 1 === maxToolRounds;
       messages.push({
         role: 'user',
-        content: toolResults.map((r) => ({
-          type: 'tool_result' as const,
-          tool_use_id: r.toolUseId,
-          content: JSON.stringify(r.content),
-          is_error: r.isError,
-        })),
+        content: isLastRoundNext
+          ? [...toolResultBlocks, { type: 'text' as const, text: WRAP_UP_NUDGE }]
+          : toolResultBlocks,
       });
 
       // Off-track detection: if every tool call in this round errored, and

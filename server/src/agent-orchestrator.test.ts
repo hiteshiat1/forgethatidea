@@ -51,6 +51,37 @@ function repeatedlyFailingToolClient(rounds: number, toolName = 'broken_tool') {
   return { streamMessage };
 }
 
+/**
+ * A scripted client where every call returns a *successful* tool_use round
+ * (unlike repeatedlyFailingToolClient) — models the real production failure
+ * this reproduces: the model keeps making legitimate, successful tool calls
+ * (e.g. update_manifest) round after round without ever emitting a text
+ * reply, burning the whole maxToolRounds budget with nothing to show for it.
+ */
+function repeatedlySucceedingToolClient(rounds: number, toolName = 'get_manifest') {
+  let call = 0;
+  const messagesReceived: AnthropicMessageParam[][] = [];
+  const streamMessage = vi.fn(async (request: { messages: AnthropicMessageParam[] }) => {
+    messagesReceived.push(request.messages);
+    call++;
+    if (call <= rounds) {
+      return {
+        inputTokens: 5,
+        outputTokens: 2,
+        stopReason: 'tool_use' as const,
+        content: [{ type: 'tool_use' as const, id: `toolu_${call}`, name: toolName, input: {} }],
+      };
+    }
+    return {
+      inputTokens: 1,
+      outputTokens: 1,
+      stopReason: 'end_turn' as const,
+      content: [{ type: 'text' as const, text: 'should not reach here' }],
+    };
+  });
+  return { streamMessage, messagesReceived };
+}
+
 function buildDeps(
   anthropicClient:
     | ReturnType<typeof scriptedAnthropicClient>
@@ -344,6 +375,27 @@ describe('agent error recovery & guardrails (#40)', () => {
 
     const result = await orchestrator.handleTurn(session.id, 'user-1', 'hello');
     expect(result).toHaveProperty('ok');
+  });
+
+  it('nudges the model to wrap up in text before the final round, when every prior round made real (non-erroring) tool calls', async () => {
+    // Reproduces the production bug: onboarding's first turn made 6
+    // consecutive successful tool_use rounds and never got a text reply,
+    // burning the full round budget silently. The consecutive-failure
+    // detector never fires here since nothing is erroring.
+    const anthropicClient = repeatedlySucceedingToolClient(20);
+    const deps = buildDeps(anthropicClient);
+    const session = await deps.sessionStore.create('user-1');
+    const orchestrator = createAgentOrchestrator({ ...deps, maxToolRounds: 5 });
+
+    await orchestrator.handleTurn(session.id, 'user-1', 'a habit tracker app');
+
+    // The last (6th) call's request — everything the model sees going into
+    // its final round — should carry the wrap-up nudge somewhere in its
+    // conversation history, giving it a real chance to reply in text before
+    // the budget runs out, rather than silently exhausting it with no warning.
+    const finalCallMessages = anthropicClient.messagesReceived.at(-1)!;
+    const serialized = JSON.stringify(finalCallMessages);
+    expect(serialized.toLowerCase()).toMatch(/last|final|wrap up|respond|text reply/);
   });
 });
 
