@@ -47,11 +47,15 @@ export function registerSessionRoutes(
   // Static per the current (no billing system yet, #92) free-tier config —
   // attached to every session response so the client can render a live
   // "N/limit" meter (#86) without a second round-trip just to learn the
-  // ceiling.
-  function withRefinementLimits<T extends object>(
+  // ceiling. Also stamps `chatMessageCount` (a count, not the transcript
+  // itself, which is already present separately as `chat`) so the client can
+  // tell "has a real conversation started" apart from "has phase advanced
+  // past onboarding" on resume — those aren't the same thing when the agent
+  // is still asking clarifying questions in the first onboarding turns.
+  function withRefinementLimits<T extends { chat: unknown[] }>(
     session: T,
-  ): T & { refinementLimits: RefinementLimits } {
-    return { ...session, refinementLimits };
+  ): T & { refinementLimits: RefinementLimits; chatMessageCount: number } {
+    return { ...session, refinementLimits, chatMessageCount: session.chat.length };
   }
 
   app.post(

@@ -378,8 +378,20 @@ export function App() {
   if (sessionState.status === 'ready' && seededSessionId !== activeSessionIdForSeeding) {
     setSeededSessionId(activeSessionIdForSeeding);
     setTurnState({ phase: sessionState.session.phase, cardIds: [] });
-    setMessages([]);
-    setOnboarded(sessionState.session.phase !== 'onboarding');
+    // Replays the stored transcript into the chat pane on resume — without
+    // this, a refresh showed "No messages yet" even though the server had
+    // the full conversation, since only phase/onboarded state was ever
+    // seeded from the resumed session.
+    setMessages(sessionState.session.chat);
+    // A session counts as "onboarded" (past the guided intro form) once
+    // phase has advanced OR a real conversation has already started —
+    // the agent's first onboarding turns ask clarifying questions before
+    // ever transitioning phase, so phase alone would re-show the guided
+    // form on every refresh during that stretch even though the user
+    // already handed off their answers.
+    setOnboarded(
+      sessionState.session.phase !== 'onboarding' || sessionState.session.chatMessageCount > 0,
+    );
   }
   const phase = turnState.phase;
 
