@@ -143,6 +143,79 @@ describe('GET /api/sessions/latest', () => {
   });
 });
 
+describe('GET /api/sessions (project list)', () => {
+  it('rejects an anonymous request', async () => {
+    const { app } = await buildTestApp();
+    const res = await app.inject({ method: 'GET', url: '/api/sessions' });
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it('returns an empty list for a user with no sessions yet', async () => {
+    const { app } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/sessions',
+      headers: { cookie: authCookie },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([]);
+    await app.close();
+  });
+
+  it('lists every session for the authenticated user, most recently updated first', async () => {
+    const { app } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: authCookie },
+    });
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: authCookie },
+    });
+    // Touch the first session so it becomes the most recently updated.
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/sessions/${first.json().id}`,
+      headers: { cookie: authCookie },
+      payload: { chat: [{ role: 'user', text: 'hi' }] },
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/sessions',
+      headers: { cookie: authCookie },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const ids = res.json().map((s: { id: string }) => s.id);
+    expect(ids).toEqual([first.json().id, second.json().id]);
+  });
+
+  it("never returns another user's sessions", async () => {
+    const { app } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+    await app.inject({ method: 'POST', url: '/api/sessions', headers: { cookie: authCookie } });
+
+    const otherCookie = await signUpAndGetCookie(app);
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/sessions',
+      headers: { cookie: otherCookie },
+    });
+
+    expect(res.json()).toEqual([]);
+    await app.close();
+  });
+});
+
 describe('GET /api/sessions/:id', () => {
   it('restores phase, chat, and cards for the owning user', async () => {
     const { app } = await buildTestApp();

@@ -22,6 +22,7 @@ export interface AuthSessionRecord {
 export interface AuthStore {
   createUser(email: string, passwordHash: string): Promise<AuthUser>;
   findUserByEmail(email: string): Promise<AuthUser | null>;
+  findUserById(id: string): Promise<AuthUser | null>;
   createSession(userId: string, tokenHash: string, expiresAt: Date): Promise<AuthSessionRecord>;
   /** Returns the session only if its token hash matches AND it hasn't expired. */
   findValidSessionByTokenHash(tokenHash: string): Promise<AuthSessionRecord | null>;
@@ -41,6 +42,11 @@ export function createDbAuthStore(db: Database): AuthStore {
 
     async findUserByEmail(email) {
       const [row] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+      return row ?? null;
+    },
+
+    async findUserById(id) {
+      const [row] = await db.select().from(users).where(eq(users.id, id)).limit(1);
       return row ?? null;
     },
 
@@ -95,6 +101,10 @@ export function createInMemoryAuthStore(): AuthStore {
     async findUserByEmail(email) {
       const id = usersByEmail.get(email);
       return id ? (usersById.get(id) ?? null) : null;
+    },
+
+    async findUserById(id) {
+      return usersById.get(id) ?? null;
     },
 
     async createSession(userId, tokenHash, expiresAt) {

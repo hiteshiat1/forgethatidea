@@ -1,0 +1,104 @@
+/* Account menu: sign-out + minimal profile + project switcher. */
+
+.account-menu {
+  position: relative;
+}
+
+.account-menu__trigger {
+  background: none;
+  border: 1px solid var(--forge-slate-200);
+  color: var(--forge-slate-100);
+  border-radius: var(--forge-radius-md);
+  padding: var(--forge-space-1) var(--forge-space-3);
+  font-size: 0.85rem;
+  cursor: pointer;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-menu__panel {
+  position: absolute;
+  top: calc(100% + var(--forge-space-2));
+  right: 0;
+  z-index: 20;
+  min-width: 240px;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--forge-space-2);
+  padding: var(--forge-space-3);
+  background: var(--forge-ink-800);
+  border: 1px solid var(--forge-slate-200);
+  border-radius: var(--forge-radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.account-menu__email {
+  font-size: 0.85rem;
+  color: var(--forge-slate-300);
+  word-break: break-all;
+  padding-bottom: var(--forge-space-2);
+  border-bottom: 1px solid var(--forge-slate-200);
+}
+
+.account-menu__section-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--forge-slate-300);
+}
+
+.account-menu__projects {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 180px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--forge-space-1);
+}
+
+.account-menu__project {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--forge-slate-100);
+  font-size: 0.85rem;
+  padding: var(--forge-space-1) var(--forge-space-2);
+  border-radius: var(--forge-radius-sm);
+  cursor: pointer;
+}
+
+.account-menu__project:hover {
+  background: var(--forge-slate-200);
+}
+
+.account-menu__project--active {
+  color: var(--forge-signal-amber);
+  font-weight: 600;
+}
+
+.account-menu__new-project {
+  background: none;
+  border: 1px dashed var(--forge-slate-200);
+  color: var(--forge-slate-100);
+  border-radius: var(--forge-radius-sm);
+  padding: var(--forge-space-1) var(--forge-space-2);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.account-menu__signout {
+  background: none;
+  border: 1px solid var(--forge-danger);
+  color: var(--forge-danger);
+  border-radius: var(--forge-radius-sm);
+  padding: var(--forge-space-1) var(--forge-space-2);
+  font-size: 0.85rem;
+  cursor: pointer;
+  margin-top: var(--forge-space-2);
+}

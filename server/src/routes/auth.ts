@@ -87,6 +87,17 @@ export function registerAuthRoutes(app: FastifyInstance, store: AuthStore) {
     reply.clearCookie(SESSION_COOKIE_NAME, { path: '/' });
     return reply.status(204).send();
   });
+
+  // "Who am I" (minimal account/profile support): lets the frontend show the
+  // signed-in user's own email without relying on stale data from the
+  // original signup/signin response body.
+  app.get('/api/auth/me', { preHandler: requireAuth(store) }, async (request, reply) => {
+    const user = await store.findUserById(request.userId!);
+    if (!user) {
+      return reply.status(401).send({ error: 'unauthenticated' });
+    }
+    return reply.status(200).send({ id: user.id, email: user.email });
+  });
 }
 
 /**

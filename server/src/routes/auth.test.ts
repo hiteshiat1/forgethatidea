@@ -229,3 +229,56 @@ describe('POST /api/auth/signout', () => {
     await app.close();
   });
 });
+
+describe('GET /api/auth/me', () => {
+  it('rejects an anonymous request', async () => {
+    const { app } = await buildTestApp();
+    const res = await app.inject({ method: 'GET', url: '/api/auth/me' });
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it("returns the signed-in user's own id and email", async () => {
+    const { app } = await buildTestApp();
+    const signupRes = await app.inject({
+      method: 'POST',
+      url: '/api/auth/signup',
+      payload: { email: 'me@example.com', password: 'correct horse battery staple' },
+    });
+    const sessionCookie = extractCookie(signupRes);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/auth/me',
+      headers: { cookie: sessionCookie },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ email: 'me@example.com' });
+    expect(res.json().id).toEqual(signupRes.json().id);
+    await app.close();
+  });
+
+  it('401s once the session has been signed out', async () => {
+    const { app } = await buildTestApp();
+    const signupRes = await app.inject({
+      method: 'POST',
+      url: '/api/auth/signup',
+      payload: { email: 'me2@example.com', password: 'correct horse battery staple' },
+    });
+    const sessionCookie = extractCookie(signupRes);
+    await app.inject({
+      method: 'POST',
+      url: '/api/auth/signout',
+      headers: { cookie: sessionCookie },
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/auth/me',
+      headers: { cookie: sessionCookie },
+    });
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+});
