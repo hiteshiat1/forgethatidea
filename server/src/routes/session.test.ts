@@ -141,6 +141,39 @@ describe('GET /api/sessions/latest', () => {
     expect(res.json()).toMatchObject({ refinementLimits: { app: 3, marketing: 3 } });
     await app.close();
   });
+
+  it('includes chatMessageCount so the client can tell a real conversation has started even before phase advances', async () => {
+    const { app } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: authCookie },
+    });
+    const sessionId = created.json().id;
+
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/sessions/${sessionId}`,
+      headers: { cookie: authCookie },
+      payload: {
+        chat: [
+          { id: '1', role: 'user', text: 'hi' },
+          { id: '2', role: 'agent', text: 'hello' },
+        ],
+      },
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/sessions/latest',
+      headers: { cookie: authCookie },
+    });
+
+    expect(res.json()).toMatchObject({ phase: 'onboarding', chatMessageCount: 2 });
+    await app.close();
+  });
 });
 
 describe('GET /api/sessions (project list)', () => {
