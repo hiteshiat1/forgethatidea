@@ -501,7 +501,7 @@ export function App() {
       }
       chat={
         <div className="chat-column">
-          <ChatPane messages={messages} />
+          <ChatPane messages={messages} pending={sending} />
           <ChatInput phase={phase} onSend={handleSend} disabled={sending} />
         </div>
       }
