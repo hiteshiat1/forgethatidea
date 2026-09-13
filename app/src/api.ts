@@ -18,10 +18,26 @@ export interface RefinementLimits {
   marketing: number;
 }
 
+export interface ApiChatMessage {
+  id: string;
+  role: 'user' | 'agent';
+  text: string;
+}
+
 export interface ApiSession {
   id: string;
   userId: string | null;
   phase: Phase;
+  /** Full chat transcript so far — replayed into the chat pane on resume. */
+  chat: ApiChatMessage[];
+  /**
+   * Convenience count mirroring `chat.length` — used to tell whether a real
+   * conversation has started (e.g. so a refresh doesn't re-show the
+   * onboarding form for a session that already has messages but hasn't been
+   * moved off the 'onboarding' phase yet) without needing callers to read
+   * `chat.length` themselves.
+   */
+  chatMessageCount: number;
   activeAppVersion: number | null;
   appRefinementRounds: number;
   marketingRefinementRounds: number;
