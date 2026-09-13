@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { type Phase } from '@forge/shared';
+import { type Phase, BUDGET_OPTIONS, TECHNICAL_LEVEL_OPTIONS } from '@forge/shared';
 import { Pill } from '@forge/shared/ui';
 import { AccountMenu } from './components/AccountMenu.js';
 import { AppShell } from './components/AppShell.js';
@@ -503,7 +503,19 @@ export function App() {
         ) : onboarded ? (
           <CanvasPane />
         ) : (
-          <Onboarding onComplete={() => setOnboarded(true)} />
+          <Onboarding
+            onComplete={(responses) => {
+              setOnboarded(true);
+              const budgetLabel =
+                BUDGET_OPTIONS.find((o) => o.value === responses.budget)?.label ?? responses.budget;
+              const technicalLabel =
+                TECHNICAL_LEVEL_OPTIONS.find((o) => o.value === responses.technicalLevel)?.label ??
+                responses.technicalLevel;
+              handleSend(
+                `${responses.idea}\n\nIndustry: ${responses.industry}\nBudget: ${budgetLabel}\nHow technical I am: ${technicalLabel}\nWhat I want out of this: ${responses.goal}`,
+              );
+            }}
+          />
         )
       }
     />
