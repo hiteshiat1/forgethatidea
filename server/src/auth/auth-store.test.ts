@@ -20,6 +20,18 @@ describe('createInMemoryAuthStore', () => {
     await expect(store.createUser('dup@example.com', 'hash2')).rejects.toThrow();
   });
 
+  it('finds a user by id (#account-profile)', async () => {
+    const store = createInMemoryAuthStore();
+    const created = await store.createUser('byid@example.com', 'hash123');
+    const found = await store.findUserById(created.id);
+    expect(found).toEqual(created);
+  });
+
+  it('returns null for an unknown id', async () => {
+    const store = createInMemoryAuthStore();
+    expect(await store.findUserById('nonexistent-id')).toBeNull();
+  });
+
   it('creates a session and finds it while valid', async () => {
     const store = createInMemoryAuthStore();
     const user = await store.createUser('a@example.com', 'hash');

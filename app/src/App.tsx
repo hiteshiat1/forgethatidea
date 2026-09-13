@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { type Phase } from '@forge/shared';
 import { Pill } from '@forge/shared/ui';
+import { AccountMenu } from './components/AccountMenu.js';
 import { AppShell } from './components/AppShell.js';
 import { AppRenderer } from './components/AppRenderer.js';
 import { AuthGate } from './components/AuthGate.js';
@@ -17,6 +18,7 @@ import { applyTurnEvents, type TurnEvent } from './turn-events.js';
 import {
   getLatestSession,
   createSession,
+  listSessions,
   triggerBuild,
   sendMessage,
   refineApp,
@@ -54,13 +56,16 @@ type SessionBootstrapState =
   | { status: 'ready'; session: ApiSession };
 
 /**
- * Session bootstrap (Epic 0.8/1.10 frontend counterpart, previously
- * nonexistent): on load, checks for an authenticated session via the real
- * httpOnly cookie the backend already issues. Anonymous -> AuthGate; once
- * authenticated, resumes the user's latest session or creates a new one.
- * Deliberately minimal — no session-switching UI, no multi-session list —
- * just enough for the rest of the app (the build route, #75) to have a
- * real session to act on.
+ * Session bootstrap (Epic 0.8/1.10 frontend counterpart): on load, checks
+ * for an authenticated session via the real httpOnly cookie the backend
+ * already issues. Anonymous -> AuthGate; once authenticated, resumes the
+ * user's latest session or creates a new one. Also exposes `switchSession`
+ * (jump straight to an already-known session, e.g. from the account menu's
+ * project list) and `startNewProject` (always creates a fresh session,
+ * mirroring the very first "no sessions yet" bootstrap path on purpose) —
+ * `signOut` is handled by the caller resetting straight to
+ * `unauthenticated`, since the sign-out network call itself lives in the
+ * account menu component.
  */
 function useSessionBootstrap() {
   const [state, setState] = useState<SessionBootstrapState>({ status: 'checking' });
@@ -100,7 +105,22 @@ function useSessionBootstrap() {
     resumeOrCreateSession();
   }
 
-  return { state, handleAuthenticated };
+  function handleSignedOut() {
+    setState({ status: 'unauthenticated' });
+  }
+
+  function switchSession(session: ApiSession) {
+    setState({ status: 'ready', session });
+  }
+
+  async function startNewProject() {
+    const created = await createSession();
+    if (created.ok) {
+      setState({ status: 'ready', session: created.data });
+    }
+  }
+
+  return { state, handleAuthenticated, handleSignedOut, switchSession, startNewProject };
 }
 
 /**
@@ -328,7 +348,13 @@ function BuildPanel({
  * placeholders that later Epic 1 issues fill in.
  */
 export function App() {
-  const { state: sessionState, handleAuthenticated } = useSessionBootstrap();
+  const {
+    state: sessionState,
+    handleAuthenticated,
+    handleSignedOut,
+    switchSession,
+    startNewProject,
+  } = useSessionBootstrap();
   const [onboarded, setOnboarded] = useState(false);
   const [turnState, setTurnState] = useState({
     phase: 'onboarding' as Phase,
@@ -336,18 +362,36 @@ export function App() {
   });
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
+  const [sessions, setSessions] = useState<ApiSession[]>([]);
 
-  // Seed turnState.phase from the real session exactly once it becomes
-  // available, then let handleTurnEvents (below, driven by real message
-  // responses) own it from there — never read session.phase directly for
-  // rendering, since that would go stale the instant a turn changes phase
-  // without a full session refetch.
-  const [phaseSeeded, setPhaseSeeded] = useState(false);
-  if (sessionState.status === 'ready' && !phaseSeeded) {
-    setPhaseSeeded(true);
-    setTurnState((prev) => ({ ...prev, phase: sessionState.session.phase }));
+  // Seed turnState.phase from the real session once it becomes available,
+  // then let handleTurnEvents (below, driven by real message responses) own
+  // it from there — never read session.phase directly for rendering, since
+  // that would go stale the instant a turn changes phase without a full
+  // session refetch. Tracks *which* session was last seeded (rather than a
+  // plain boolean) so switching projects — a new session id arriving into
+  // the same mounted component — re-seeds instead of being silently
+  // skipped as "already done".
+  const [seededSessionId, setSeededSessionId] = useState<string | null>(null);
+  const activeSessionIdForSeeding =
+    sessionState.status === 'ready' ? sessionState.session.id : null;
+  if (sessionState.status === 'ready' && seededSessionId !== activeSessionIdForSeeding) {
+    setSeededSessionId(activeSessionIdForSeeding);
+    setTurnState({ phase: sessionState.session.phase, cardIds: [] });
+    setMessages([]);
+    setOnboarded(sessionState.session.phase !== 'onboarding');
   }
   const phase = turnState.phase;
+
+  useEffect(() => {
+    if (sessionState.status === 'ready') {
+      listSessions().then((result) => {
+        if (result.ok) setSessions(result.data);
+      });
+    } else {
+      setSessions([]);
+    }
+  }, [activeSessionIdForSeeding, sessionState.status]);
 
   /**
    * Applies a turn's ordered events (Epic 2.12) — phase transitions and card
@@ -356,16 +400,16 @@ export function App() {
   function handleTurnEvents(events: TurnEvent[]) {
     setTurnState((prev) => applyTurnEvents(prev, events));
   }
-  // Refinement round state (Epic 2.11, live-wired in #86): seeded once from
-  // the real session (server-tracked, #38) alongside the phase, then kept
+  // Refinement round state (Epic 2.11, live-wired in #86): seeded from the
+  // real session (server-tracked, #38) alongside the phase, then kept
   // current locally as refine-app calls (#76/#85/#89) report fresh round
-  // counts — mirrors the phaseSeeded pattern above rather than refetching
-  // the whole session after every refinement.
+  // counts — mirrors the seededSessionId re-seed-on-switch pattern above
+  // rather than refetching the whole session after every refinement.
   const [refinement, setRefinement] = useState({
     app: { rounds: 0, limit: 3 },
     marketing: { rounds: 0, limit: 3 },
   });
-  if (sessionState.status === 'ready' && !phaseSeeded) {
+  if (sessionState.status === 'ready' && seededSessionId !== activeSessionIdForSeeding) {
     const { session } = sessionState;
     setRefinement({
       app: { rounds: session.appRefinementRounds, limit: session.refinementLimits.app },
@@ -431,6 +475,16 @@ export function App() {
             entitlement="free"
           />
           <HealthIndicator />
+          <AccountMenu
+            onSignedOut={handleSignedOut}
+            sessions={sessions}
+            activeSessionId={sessionId}
+            onSelectSession={(id) => {
+              const target = sessions.find((s) => s.id === id);
+              if (target) switchSession(target);
+            }}
+            onNewProject={startNewProject}
+          />
         </div>
       }
       chat={

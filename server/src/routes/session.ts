@@ -75,6 +75,20 @@ export function registerSessionRoutes(
     },
   );
 
+  // Project list (account/profile support): every session the user has
+  // ever created, most-recently-updated first — `listByUser` already
+  // returns exactly this shape, this route just stops discarding all but
+  // the first entry the way /latest does. Lets the frontend offer a
+  // project switcher instead of only ever resuming the single latest one.
+  app.get(
+    '/api/sessions',
+    { preHandler: auth },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const sessions = await store.listByUser(request.userId!);
+      return reply.status(200).send(sessions.map(withRefinementLimits));
+    },
+  );
+
   app.get<{ Params: { id: string } }>(
     '/api/sessions/:id',
     { preHandler: auth },

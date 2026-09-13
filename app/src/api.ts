@@ -26,6 +26,8 @@ export interface ApiSession {
   appRefinementRounds: number;
   marketingRefinementRounds: number;
   refinementLimits: RefinementLimits;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export type ApiError = { error: string; [key: string]: unknown };
@@ -60,9 +62,27 @@ export async function signin(email: string, password: string) {
   return parseJsonOrError<AuthUser>(res);
 }
 
+/** Signs out the current user — revokes the session server-side and clears the cookie. */
+export async function signout() {
+  const res = await fetch('/api/auth/signout', { method: 'POST', credentials: 'include' });
+  return res.ok;
+}
+
+/** The signed-in user's own id/email — used to display who's signed in (account menu). */
+export async function getMe() {
+  const res = await fetch('/api/auth/me', { credentials: 'include' });
+  return parseJsonOrError<AuthUser>(res);
+}
+
 export async function getLatestSession() {
   const res = await fetch('/api/sessions/latest', { credentials: 'include' });
   return parseJsonOrError<ApiSession | null>(res);
+}
+
+/** Every project/session the user has ever started, most recently updated first (project switcher). */
+export async function listSessions() {
+  const res = await fetch('/api/sessions', { credentials: 'include' });
+  return parseJsonOrError<ApiSession[]>(res);
 }
 
 export async function createSession() {
