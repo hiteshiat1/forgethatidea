@@ -14,6 +14,15 @@ export interface ChatMessage {
 
 export interface ChatPaneProps {
   messages: ChatMessage[];
+  /**
+   * True while a turn is in flight with no reply yet — real turns can take
+   * 10-20+ seconds (a multi-round Anthropic call server-side) with no
+   * intermediate progress events, so without this the user has no signal
+   * anything is happening between sending a message and the reply
+   * appearing. Rendered as a trailing "typing" bubble, never as part of
+   * `messages` itself.
+   */
+  pending?: boolean;
 }
 
 /**
@@ -24,14 +33,14 @@ export interface ChatPaneProps {
  * agent orchestrator's job (not yet built) — this component only needs an
  * ordered message list, so it's ready for that wiring without changes.
  */
-export function ChatPane({ messages }: ChatPaneProps) {
+export function ChatPane({ messages, pending = false }: ChatPaneProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' });
-  }, [messages]);
+  }, [messages, pending]);
 
-  if (messages.length === 0) {
+  if (messages.length === 0 && !pending) {
     return (
       <div className="chat-pane chat-pane--empty" aria-live="polite">
         <p className="chat-pane__empty-title">No messages yet</p>
@@ -62,6 +71,15 @@ export function ChatPane({ messages }: ChatPaneProps) {
           </span>
         </div>
       ))}
+      {pending && (
+        <div className="chat-message chat-message--agent" aria-label="Forge is working on a reply">
+          <span className="chat-message__bubble chat-message__bubble--typing">
+            <span className="chat-typing-dot" />
+            <span className="chat-typing-dot" />
+            <span className="chat-typing-dot" />
+          </span>
+        </div>
+      )}
       <div ref={bottomRef} />
     </div>
   );

@@ -29,12 +29,42 @@
   flex-shrink: 0;
 }
 
-/* ---- Body: two panes ---- */
+/* ---- Body: two panes + draggable divider ---- */
+/* grid-template-columns is set inline (AppShell.tsx) to the persisted chat
+   pane width — the base rule here is only the pre-JS/no-JS fallback. */
 .shell-body {
   display: grid;
-  grid-template-columns: minmax(320px, 420px) 1fr;
+  grid-template-columns: minmax(320px, 420px) 6px 1fr;
   min-height: 0;
   overflow: hidden;
+}
+
+.shell-divider {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: col-resize;
+  background: var(--forge-ink-600);
+  touch-action: none;
+}
+
+.shell-divider:hover,
+.shell-divider:focus-visible {
+  background: var(--forge-signal-amber);
+  outline: none;
+}
+
+.shell-divider__grip {
+  width: 2px;
+  height: 32px;
+  border-radius: var(--forge-radius-sm);
+  background: var(--forge-slate-400);
+}
+
+.shell-divider:hover .shell-divider__grip,
+.shell-divider:focus-visible .shell-divider__grip {
+  background: var(--forge-ink-900);
 }
 
 .shell-pane {
@@ -54,21 +84,24 @@
   background: var(--forge-ink-900);
 }
 
-/* Laptop widths: narrow the chat column so the canvas keeps room. */
-@media (max-width: 1100px) {
-  .shell-body {
-    grid-template-columns: minmax(280px, 360px) 1fr;
-  }
-}
+/* Laptop widths: the draggable divider (AppShell.tsx) already clamps the
+   chat pane's width to leave the canvas enough room as the window narrows,
+   so no separate override is needed here above the stacking breakpoint. */
 
-/* Narrow / tablet: stack panes vertically. Full mobile pass is Epic 1.12. */
+/* Narrow / tablet: stack panes vertically and hide the (horizontal-only)
+   divider. Full mobile pass is Epic 1.12. `!important` is required here
+   since AppShell.tsx sets grid-template-columns as an inline style, which
+   otherwise always wins over this media query's class-selector rule. */
 @media (max-width: 760px) {
   .shell-body {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr !important;
     grid-template-rows: minmax(0, 45%) 1fr;
   }
   .shell-pane--chat {
     border-right: none;
     border-bottom: 1px solid var(--forge-ink-600);
+  }
+  .shell-divider {
+    display: none;
   }
 }
