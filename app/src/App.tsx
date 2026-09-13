@@ -143,7 +143,7 @@ function BuildPanel({
 }) {
   const [stage, setStage] = useState<BuildStage>('compiling');
   const [error, setError] = useState<string | undefined>(undefined);
-  const [code, setCode] = useState<string | null>(null);
+  const [app, setApp] = useState<{ code: string; compiledCode: string } | null>(null);
   const [building, setBuilding] = useState(false);
   const [refining, setRefining] = useState(false);
   const [refineNote, setRefineNote] = useState<string | null>(null);
@@ -161,7 +161,7 @@ function BuildPanel({
     let cancelled = false;
     getAppArtifact(sessionId).then((result) => {
       if (!cancelled && result.ok) {
-        setCode(result.code);
+        setApp({ code: result.code, compiledCode: result.compiledCode });
       }
     });
     return () => {
@@ -172,7 +172,7 @@ function BuildPanel({
   async function runBuild() {
     setBuilding(true);
     setError(undefined);
-    setCode(null);
+    setApp(null);
     setStage('compiling');
 
     // The build route (#75) runs synchronously end to end server-side —
@@ -191,7 +191,7 @@ function BuildPanel({
     }
 
     setStage('rendering');
-    setCode(result.code);
+    setApp({ code: result.code, compiledCode: result.compiledCode });
     setStage('done');
     setVersionsRefreshKey((k) => k + 1);
   }
@@ -202,7 +202,7 @@ function BuildPanel({
     setReverting(false);
 
     if (result.ok) {
-      setCode(result.code);
+      setApp({ code: result.code, compiledCode: result.compiledCode });
       setGate(null);
       setVersionsRefreshKey((k) => k + 1);
     }
@@ -250,12 +250,12 @@ function BuildPanel({
       return;
     }
 
-    setCode(result.code);
+    setApp({ code: result.code, compiledCode: result.compiledCode });
     onAppRoundUsed(result.rounds);
     setVersionsRefreshKey((k) => k + 1);
   }
 
-  if (code) {
+  if (app) {
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
         <div
@@ -298,7 +298,7 @@ function BuildPanel({
           )}
         </div>
         <div style={{ flex: 1, minHeight: 0 }}>
-          <AppRenderer code={code} />
+          <AppRenderer compiledCode={app.compiledCode} />
         </div>
         <VersionHistory
           sessionId={sessionId}

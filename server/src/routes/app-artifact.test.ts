@@ -99,10 +99,36 @@ describe('GET /api/sessions/:id/app (#94)', () => {
     expect(res.json()).toEqual({ ok: false, error: 'no_build_to_resume' });
   });
 
-  it('returns the active app code and version so a resumed session can re-render it', async () => {
+  it('returns the active app code, compiled JS, and version so a resumed session can re-render it', async () => {
     const { app, sessionStore, artifactStore } = await buildTestApp();
     const authCookie = await signUpAndGetCookie(app);
     const sessionId = await createSessionAs(app, authCookie);
+    await artifactStore.save(sessionId, 'app', {
+      manifestId: 'm1',
+      content: { code: CODE, compiledCode: 'var ForgeCompiledApp = {};' },
+    });
+    await sessionStore.update(sessionId, { activeAppVersion: 1 });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/sessions/${sessionId}/app`,
+      headers: { cookie: authCookie },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({
+      ok: true,
+      code: CODE,
+      compiledCode: 'var ForgeCompiledApp = {};',
+      version: 1,
+    });
+  });
+
+  it('compiles on the fly for a legacy artifact saved before compiledCode existed (#eval-csp-fix)', async () => {
+    const { app, sessionStore, artifactStore } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+    const sessionId = await createSessionAs(app, authCookie);
+    // Legacy shape: no compiledCode field at all.
     await artifactStore.save(sessionId, 'app', { manifestId: 'm1', content: { code: CODE } });
     await sessionStore.update(sessionId, { activeAppVersion: 1 });
 
@@ -113,6 +139,7 @@ describe('GET /api/sessions/:id/app (#94)', () => {
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ ok: true, code: CODE, version: 1 });
+    expect(res.json().code).toBe(CODE);
+    expect(res.json().compiledCode).toContain('ForgeCompiledApp');
   });
 });

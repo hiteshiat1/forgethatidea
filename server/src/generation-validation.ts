@@ -5,6 +5,20 @@ export type ValidationErrorCode = ContractViolation | 'compile_error';
 
 export interface ValidationSuccess {
   ok: true;
+  /**
+   * Plain, already-transpiled JS (esbuild, IIFE format assigned to the
+   * `ForgeCompiledApp` global) — lets the sandboxed preview iframe
+   * (AppRenderer) run the generated app with an ordinary script tag, with
+   * no client-side JSX transpilation and therefore no runtime string-eval
+   * step at all. Browsers block that under a strict `script-src` CSP
+   * (inherited by `srcDoc` iframes from the parent document,
+   * unconditionally — there's no sandbox-attribute opt-out), and the only
+   * safe fix that doesn't also grant the iframe `allow-same-origin` (which
+   * would let generated code reach the parent's cookies/session, defeating
+   * the whole point of the sandbox) is to never need that in the browser
+   * in the first place.
+   */
+  compiledCode: string;
 }
 
 export interface ValidationFailure {
@@ -53,8 +67,15 @@ export async function validateGeneratedCode(code: string): Promise<ValidationRes
   errors.push(...contractViolations);
   details.push(...contractViolations.map((v) => `Contract violation: ${v}`));
 
+  let compiledCode: string | undefined;
   try {
-    await transform(code, { loader: 'jsx', jsx: 'transform' });
+    const result = await transform(code, {
+      loader: 'jsx',
+      jsx: 'transform',
+      format: 'iife',
+      globalName: 'ForgeCompiledApp',
+    });
+    compiledCode = result.code;
   } catch (err) {
     errors.push('compile_error');
     details.push(err instanceof Error ? err.message : 'Unknown compile error');
@@ -64,5 +85,19 @@ export async function validateGeneratedCode(code: string): Promise<ValidationRes
     return { ok: false, errors, details };
   }
 
-  return { ok: true };
+  return { ok: true, compiledCode: compiledCode! };
+}
+
+/**
+ * Compiles code for the preview iframe on the fly — used wherever a legacy
+ * artifact (saved before `compiledCode` existed on the artifact content
+ * shape) needs a compiled form, or where an already-active/previously-valid
+ * artifact's original code needs recompiling (e.g. reverting a diff-edit).
+ * Falls back to the raw source on a compile failure rather than throwing —
+ * worse for the preview (it'll error there instead of rendering), but the
+ * caller must still resolve rather than crash.
+ */
+export async function compileForPreview(code: string): Promise<string> {
+  const result = await validateGeneratedCode(code);
+  return isValidationFailure(result) ? code : result.compiledCode;
 }

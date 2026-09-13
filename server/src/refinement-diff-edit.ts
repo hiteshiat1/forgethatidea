@@ -1,5 +1,9 @@
 import type { MessageContentBlock, StreamMessageRequest } from './anthropic-client.js';
-import { validateGeneratedCode, isValidationFailure } from './generation-validation.js';
+import {
+  validateGeneratedCode,
+  isValidationFailure,
+  compileForPreview,
+} from './generation-validation.js';
 
 export interface DiffEditRetryContext {
   previousAttempt: string;
@@ -80,6 +84,8 @@ export interface RunDiffEditInput {
 export interface DiffEditSuccess {
   ok: true;
   code: string;
+  /** Pre-transpiled plain JS for `code` (see generation-validation.ts) — lets the preview iframe run with no client-side eval. */
+  compiledCode: string;
   /** True when every edit attempt failed validation and the original code was kept unchanged, rather than an unrelated regeneration. */
   revertedToOriginal: boolean;
   repairRounds: number;
@@ -145,11 +151,23 @@ export async function runDiffEdit(input: RunDiffEditInput): Promise<DiffEditResu
 
     const validation = await validateGeneratedCode(editedCode);
     if (!isValidationFailure(validation)) {
-      return { ok: true, code: editedCode, revertedToOriginal: false, repairRounds: round };
+      return {
+        ok: true,
+        code: editedCode,
+        compiledCode: validation.compiledCode,
+        revertedToOriginal: false,
+        repairRounds: round,
+      };
     }
 
     if (round === maxRepairRounds) {
-      return { ok: true, code: currentCode, revertedToOriginal: true, repairRounds: round };
+      return {
+        ok: true,
+        code: currentCode,
+        compiledCode: await compileForPreview(currentCode),
+        revertedToOriginal: true,
+        repairRounds: round,
+      };
     }
 
     retry = { previousAttempt: editedCode, errors: validation.errors };
@@ -158,5 +176,11 @@ export async function runDiffEdit(input: RunDiffEditInput): Promise<DiffEditResu
   // Unreachable — the loop always returns within its bounds — but keeps the
   // function's return type total rather than relying on control-flow
   // analysis across the for loop.
-  return { ok: true, code: currentCode, revertedToOriginal: true, repairRounds: maxRepairRounds };
+  return {
+    ok: true,
+    code: currentCode,
+    compiledCode: await compileForPreview(currentCode),
+    revertedToOriginal: true,
+    repairRounds: maxRepairRounds,
+  };
 }

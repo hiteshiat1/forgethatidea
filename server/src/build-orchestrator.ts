@@ -29,6 +29,8 @@ export interface BuildOrchestratorDeps {
 export interface BuildSuccess {
   ok: true;
   code: string;
+  /** Pre-transpiled plain JS for `code` (see generation-validation.ts) — lets the preview iframe run with no client-side eval. */
+  compiledCode: string;
   version: number;
   repairRounds: number;
 }
@@ -144,13 +146,18 @@ export function createBuildOrchestrator(deps: BuildOrchestratorDeps) {
 
     const saved = await artifactStore.save(sessionId, 'app', {
       manifestId: frozenManifest.id,
-      content: { code: repairResult.code, changeSummary: 'Initial build' },
+      content: {
+        code: repairResult.code,
+        compiledCode: repairResult.compiledCode,
+        changeSummary: 'Initial build',
+      },
     });
     await sessionStore.update(sessionId, { activeAppVersion: saved.version });
 
     return {
       ok: true,
       code: repairResult.code,
+      compiledCode: repairResult.compiledCode,
       version: saved.version,
       repairRounds: repairResult.repairRounds,
     };

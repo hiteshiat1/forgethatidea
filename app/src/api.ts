@@ -93,6 +93,8 @@ export async function createSession() {
 export interface BuildSuccessResponse {
   ok: true;
   code: string;
+  /** Pre-transpiled plain JS for `code` — AppRenderer runs this directly with no client-side JSX transpilation/eval. */
+  compiledCode: string;
   version: number;
   repairRounds: number;
 }
@@ -111,6 +113,8 @@ export interface RefineAppChangeSuccess {
   ok: true;
   kind: 'change_request';
   code: string;
+  /** Pre-transpiled plain JS for `code` — AppRenderer runs this directly with no client-side JSX transpilation/eval. */
+  compiledCode: string;
   version: number;
   revertedToOriginal: boolean;
   rounds: number;
@@ -186,6 +190,8 @@ export function isUnsafeRequest(response: RefineAppResponse): response is Refine
 export interface AppArtifactSuccess {
   ok: true;
   code: string;
+  /** Pre-transpiled plain JS for `code` — AppRenderer runs this directly with no client-side JSX transpilation/eval. */
+  compiledCode: string;
   version: number;
 }
 
@@ -222,6 +228,8 @@ export interface RevertAppVersionSuccess {
   ok: true;
   version: number;
   code: string;
+  /** Pre-transpiled plain JS for `code` — AppRenderer runs this directly with no client-side JSX transpilation/eval. */
+  compiledCode: string;
 }
 
 export type RevertAppVersionResponse = RevertAppVersionSuccess | { ok: false; error: string };
