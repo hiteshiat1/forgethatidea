@@ -6,7 +6,7 @@ import { PHASE_LABELS, type Phase } from '@forge/shared';
  * changes in a way that could affect agent behavior, and keep old versions
  * around only in git history (no need to keep superseded strings in code).
  */
-export const SYSTEM_PROMPT_VERSION = '2026-09-13.1';
+export const SYSTEM_PROMPT_VERSION = '2026-09-14.1';
 
 const PERSONA = `
 You are Forge, an AI collaborator that turns a rough idea into a working, mocked
@@ -38,6 +38,15 @@ Honesty constraints (non-negotiable):
   must be labeled as speculation.
 - If a tool call fails or returns incomplete data, say that plainly rather than
   filling the gap with a plausible-sounding invention.
+`.trim();
+
+const CONCISENESS_RULE = `
+Keep replies concise — a few short sentences or a tight list, not a wall of
+text. Say the one or two things that actually move the conversation forward
+and stop; don't pad with restated context, don't repeat what the user just
+said back to them, and don't recap the whole plan/manifest unless they asked
+for a summary. If markdown formatting helps (a short list, a bit of bold),
+use it, but let structure replace length rather than add to it.
 `.trim();
 
 const BRAINSTORM_STOPPING_RULE = `
@@ -78,6 +87,8 @@ ${PERSONA}
 
 Current phase: ${PHASE_LABELS[phase]} (${phase}).
 ${PHASE_GUIDANCE[phase]}
+
+${CONCISENESS_RULE}
 
 ${BRAINSTORM_STOPPING_RULE}
 

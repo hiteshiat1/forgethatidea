@@ -40,6 +40,71 @@
   color: var(--forge-slate-100);
 }
 
+/* Markdown rendering (MarkdownMessage.tsx) — resets block-element default
+   margins so rendered markdown fits the compact bubble instead of leaving
+   browser-default paragraph/list gaps designed for full documents. */
+.chat-message__markdown {
+  display: block;
+}
+
+.chat-message__markdown :first-child {
+  margin-top: 0;
+}
+
+.chat-message__markdown :last-child {
+  margin-bottom: 0;
+}
+
+.chat-message__markdown p {
+  margin: 0 0 var(--forge-space-2);
+}
+
+.chat-message__markdown ul,
+.chat-message__markdown ol {
+  margin: 0 0 var(--forge-space-2);
+  padding-left: 1.25em;
+}
+
+.chat-message__markdown li {
+  margin-bottom: 2px;
+}
+
+.chat-message__markdown code {
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: var(--forge-radius-sm);
+  padding: 1px 5px;
+  font-size: 0.85em;
+}
+
+.chat-message--user .chat-message__markdown code {
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.chat-message__markdown pre {
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: var(--forge-radius-sm);
+  padding: var(--forge-space-2);
+  overflow-x: auto;
+  margin: 0 0 var(--forge-space-2);
+}
+
+.chat-message__markdown pre code {
+  background: none;
+  padding: 0;
+}
+
+.chat-message__markdown a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.chat-message__markdown blockquote {
+  margin: 0 0 var(--forge-space-2);
+  padding-left: var(--forge-space-3);
+  border-left: 2px solid currentColor;
+  opacity: 0.85;
+}
+
 .chat-message__cursor {
   display: inline-block;
   margin-left: 2px;
