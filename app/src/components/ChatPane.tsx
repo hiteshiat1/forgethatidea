@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { color } from '@forge/shared';
+import { MarkdownMessage } from './MarkdownMessage.js';
 import '../styles/chat-pane.css';
 
 export type ChatRole = 'user' | 'agent';
@@ -58,7 +59,7 @@ export function ChatPane({ messages, pending = false }: ChatPaneProps) {
           aria-busy={message.streaming || undefined}
         >
           <span className="chat-message__bubble">
-            {message.text}
+            {message.role === 'agent' ? <MarkdownMessage text={message.text} /> : message.text}
             {message.streaming && (
               <span
                 className="chat-message__cursor"

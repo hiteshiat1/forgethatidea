@@ -44,6 +44,13 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain(SYSTEM_PROMPT_VERSION);
   });
 
+  it('instructs the agent to keep replies concise, not a wall of text', () => {
+    const prompt = buildSystemPrompt({ phase: 'onboarding' });
+    expect(prompt.toLowerCase()).toMatch(/concise|brief|short/);
+    // Should discourage padding/repetition specifically, not just say "be nice".
+    expect(prompt.toLowerCase()).toMatch(/pad|repeat|restat|verbos|wall of text/);
+  });
+
   it('accepts every real phase without throwing', () => {
     const phases = ['onboarding', 'sources', 'brainstorm', 'planning', 'build', 'refine'] as const;
     for (const phase of phases) {
