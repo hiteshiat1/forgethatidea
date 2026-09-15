@@ -12,6 +12,13 @@ export interface SessionCard {
   id: string;
   type: string;
   status: 'draft' | 'refined' | 'locked' | 'live';
+  /**
+   * The card's actual rendered content (e.g. the 3 build options, the
+   * architecture summary) — added alongside the render_* tools (Epic 3.1+)
+   * that populate it. Optional so older/still-content-free card types (none
+   * currently) or future non-content cards don't need a placeholder.
+   */
+  content?: unknown;
 }
 
 export interface GateResult {

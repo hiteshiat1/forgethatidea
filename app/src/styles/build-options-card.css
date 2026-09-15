@@ -1,0 +1,54 @@
+/* Build options comparison card (Epic 3.1). */
+
+.build-options-card__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--forge-space-3);
+}
+
+.build-options-card__option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--forge-space-2);
+  padding: var(--forge-space-3);
+  border-radius: var(--forge-radius-md);
+  border: 1px solid var(--forge-ink-500);
+  background: var(--forge-ink-800);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.build-options-card__option:hover:not(:disabled) {
+  border-color: var(--forge-signal-amber);
+}
+
+.build-options-card__option:disabled {
+  cursor: default;
+}
+
+.build-options-card__option--selected {
+  border-color: var(--forge-signal-amber);
+  background: var(--forge-ink-700);
+}
+
+.build-options-card__option-name {
+  font-weight: 600;
+}
+
+.build-options-card__option-summary {
+  font-size: 0.875rem;
+  color: var(--forge-slate-300);
+}
+
+.build-options-card__option-badge {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: var(--forge-radius-pill);
+  background: var(--forge-signal-amber);
+  color: var(--forge-ink-900);
+  font-size: 0.75rem;
+  font-weight: 600;
+}

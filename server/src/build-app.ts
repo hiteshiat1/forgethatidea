@@ -13,6 +13,7 @@ import {
   createInMemorySessionStore,
 } from './session-store.js';
 import { registerSessionRoutes } from './routes/session.js';
+import { registerCardSelectionRoutes } from './routes/card-selection.js';
 import type { RefinementLimits } from './refinement-tracker.js';
 import {
   createCostGuard,
@@ -227,6 +228,7 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
     marketing: env.FREE_MARKETING_REFINEMENT_LIMIT,
   };
   registerSessionRoutes(app, authStore, sessionStore, refinementLimits);
+  registerCardSelectionRoutes(app, authStore, sessionStore);
 
   // Anthropic Messages API wrapper (Epic 0.9). Only constructed when a key is
   // present so the server still boots without one in dev/test.

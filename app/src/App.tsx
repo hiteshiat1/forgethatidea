@@ -18,6 +18,7 @@ import { applyTurnEvents, type TurnEvent } from './turn-events.js';
 import {
   getLatestSession,
   createSession,
+  getSession,
   listSessions,
   triggerBuild,
   sendMessage,
@@ -27,9 +28,13 @@ import {
   isUnsafeRequest,
   getAppArtifact,
   revertAppVersion,
+  selectBuildOption,
   type AuthUser,
   type ApiSession,
+  type ApiSessionCard,
+  type BuildOptionsCardContent,
 } from './api.js';
+import { BuildOptionsCard } from './components/BuildOptionsCard.js';
 
 type Health = { status: string; env: string } | null;
 
@@ -363,6 +368,8 @@ export function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
   const [sessions, setSessions] = useState<ApiSession[]>([]);
+  const [cards, setCards] = useState<ApiSessionCard[]>([]);
+  const [selectingOption, setSelectingOption] = useState(false);
 
   // Seed turnState.phase from the real session once it becomes available,
   // then let handleTurnEvents (below, driven by real message responses) own
@@ -392,6 +399,7 @@ export function App() {
     setOnboarded(
       sessionState.session.phase !== 'onboarding' || sessionState.session.chatMessageCount > 0,
     );
+    setCards(sessionState.session.cards);
   }
   const phase = turnState.phase;
 
@@ -463,6 +471,25 @@ export function App() {
       { id: crypto.randomUUID(), role: 'agent', text: result.reply },
     ]);
     handleTurnEvents(result.events);
+
+    // card_emitted only carries {cardId, cardType} (turn-events.ts) — no
+    // content — so a turn that touched any card refetches the session to
+    // pick up the real card content rather than trying to thread it through
+    // the event payload itself.
+    if (result.events.some((event) => event.type === 'card_emitted')) {
+      const refreshed = await getSession(sessionId);
+      if (refreshed.ok) setCards(refreshed.data.cards);
+    }
+  }
+
+  async function handleSelectBuildOption(index: number) {
+    if (sessionState.status !== 'ready') return;
+    setSelectingOption(true);
+    const result = await selectBuildOption(sessionState.session.id, index);
+    setSelectingOption(false);
+    if (result.ok) {
+      setCards((prev) => prev.map((c) => (c.type === 'options' ? result.card : c)));
+    }
   }
 
   if (sessionState.status === 'checking') {
@@ -513,7 +540,20 @@ export function App() {
             onAppRoundUsed={handleAppRoundUsed}
           />
         ) : onboarded ? (
-          <CanvasPane />
+          <CanvasPane>
+            {cards.map((card, i) =>
+              card.type === 'options' ? (
+                <BuildOptionsCard
+                  key={card.id}
+                  index={i + 1}
+                  status={card.status}
+                  content={card.content as BuildOptionsCardContent}
+                  onSelect={handleSelectBuildOption}
+                  selecting={selectingOption}
+                />
+              ) : null,
+            )}
+          </CanvasPane>
         ) : (
           <Onboarding
             onComplete={(responses) => {

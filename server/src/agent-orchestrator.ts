@@ -10,6 +10,7 @@ import { createManifestTools } from './manifest-tools.js';
 import { createSourcesTools } from './sources-tools.js';
 import { createPhaseTransitionTool } from './phase-transition-tool.js';
 import { createManifestSummaryTool } from './manifest-summary-tool.js';
+import { createRenderBuildOptionsTool } from './render-build-options-tool.js';
 import { compactChatHistory } from './conversation-compaction.js';
 import { emitAnalyticsEvent, type AnalyticsLogger } from './analytics.js';
 import type { TurnEvent } from './turn-events.js';
@@ -161,6 +162,38 @@ const BUILT_IN_TOOL_SCHEMAS = {
       'Recap the current build manifest in plain, non-technical language — the idea, entities, screens, key actions, and whether cost/marketing work has started. Use this whenever the user asks what has been decided so far.',
     inputSchema: { type: 'object', properties: {} },
   },
+  render_build_options: {
+    description:
+      'Present exactly 3 meaningfully different build-direction options to the user during the brainstorm/planning phase (differing in scope, audience, or core mechanic — not just wording). Each option needs a short name and a one-sentence summary. Calling this again replaces the previous set of options rather than adding to it.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        options: {
+          type: 'array',
+          minItems: 3,
+          maxItems: 3,
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              summary: { type: 'string' },
+            },
+            required: ['name', 'summary'],
+          },
+        },
+      },
+      required: ['options'],
+    },
+  },
+  select_build_option: {
+    description:
+      "Lock in the user's chosen build option once they've picked one from the presented options (0-based index). This finalizes the options card so planning can proceed.",
+    inputSchema: {
+      type: 'object',
+      properties: { index: { type: 'number' } },
+      required: ['index'],
+    },
+  },
 } as const;
 
 function toAnthropicMessages(chat: ChatMessage[]): AnthropicMessageParam[] {
@@ -236,6 +269,11 @@ export function createAgentOrchestrator(deps: AgentOrchestratorDeps) {
       manifestStore,
       sessionId,
     });
+    const buildOptionsTool = createRenderBuildOptionsTool({
+      store: sessionStore,
+      sessionId,
+      onEvent: (event) => events.push(event),
+    });
     const toolRegistry: ToolRegistry = {
       get_manifest: manifestTools.get_manifest,
       update_manifest: manifestTools.update_manifest,
@@ -243,6 +281,8 @@ export function createAgentOrchestrator(deps: AgentOrchestratorDeps) {
       decline_sources: sourcesTools.decline_sources,
       transition_phase: phaseTransitionTool.transition_phase,
       summarize_manifest: manifestSummaryTool.summarize_manifest,
+      render_build_options: buildOptionsTool.render_build_options,
+      select_build_option: buildOptionsTool.select_build_option,
       ...deps.extraTools,
     };
     const dispatcher = createToolDispatcher({ tools: toolRegistry, logger: silentLogger() });
