@@ -51,6 +51,11 @@ import {
   type WebSearchClient,
 } from './web-search.js';
 import {
+  createPricingCatalog,
+  createCuratedPricingClient,
+  type PricingClient,
+} from './pricing-catalog.js';
+import {
   createDbManifestStore,
   createInMemoryManifestStore,
   type ManifestStore,
@@ -86,6 +91,7 @@ declare module 'fastify' {
     db?: Database;
     costGuard: ReturnType<typeof createCostGuard>;
     webSearchTool: ReturnType<typeof createWebSearchTool>;
+    pricingCatalog: ReturnType<typeof createPricingCatalog>;
   }
 }
 
@@ -114,6 +120,8 @@ export interface BuildAppDeps {
   costGuard?: ReturnType<typeof createCostGuard>;
   /** Web search client (Epic 2.9). Defaults to a real Tavily client keyed by env, or an unconfigured stub. */
   webSearchClient?: WebSearchClient;
+  /** Pricing data source (Epic 3.3). Defaults to the maintained curated snapshot (pricing-catalog.ts). */
+  pricingClient?: PricingClient;
   /** Build manifest persistence (Epic 2.5/2.6). Defaults to DB-backed when `db` is available, else in-memory. */
   manifestStore?: ManifestStore;
   /** Anthropic client the agent orchestrator (Epic 2) calls directly — needs the richer tool-calling shape, not the generic model router. Defaults to `anthropicClient` above. */
@@ -308,6 +316,14 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
       : createUnconfiguredWebSearchClient());
   const webSearchTool = createWebSearchTool({ client: webSearchClient, logger: app.log });
   app.decorate('webSearchTool', webSearchTool);
+
+  // Live pricing fetch service (Epic 3.3): defensible, sourced cost line
+  // items for render_cost_table (#47). Defaults to the maintained curated
+  // snapshot — see pricing-catalog.ts's doc comment for why this isn't a
+  // live scrape.
+  const pricingClient = deps.pricingClient ?? createCuratedPricingClient();
+  const pricingCatalog = createPricingCatalog({ client: pricingClient });
+  app.decorate('pricingCatalog', pricingCatalog);
 
   // Build manifest persistence (Epic 2.5/2.6). Same DB-backed-else-in-memory
   // convention as every other store above.
