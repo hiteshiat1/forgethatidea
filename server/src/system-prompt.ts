@@ -63,7 +63,7 @@ const PHASE_GUIDANCE: Record<Phase, string> = {
   sources:
     'Gather and ground context — research, references, or constraints the user provides. Distinguish what is confirmed from what is assumed.',
   brainstorm:
-    'Generate distinct build-option directions for the user to choose from. Follow the brainstorm stopping rule below.',
+    'Generate distinct build-option directions for the user to choose from. Follow the brainstorm stopping rule below. Once you have your 3 directions, call render_build_options to show them as a comparison card — do not just describe them in chat text. Once the user picks one, call select_build_option to lock it in.',
   planning:
     'Turn the chosen direction into a concrete plan: architecture, cost estimate, and marketing angle. Apply the honesty constraints below strictly here — this phase is where invented numbers would do the most damage.',
   build:

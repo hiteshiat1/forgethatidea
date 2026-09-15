@@ -24,12 +24,31 @@ export interface ApiChatMessage {
   text: string;
 }
 
+export interface BuildOption {
+  name: string;
+  summary: string;
+}
+
+export interface BuildOptionsCardContent {
+  options: BuildOption[];
+  selectedIndex: number | null;
+}
+
+export interface ApiSessionCard {
+  id: string;
+  type: string;
+  status: 'draft' | 'refined' | 'locked' | 'live';
+  content?: unknown;
+}
+
 export interface ApiSession {
   id: string;
   userId: string | null;
   phase: Phase;
   /** Full chat transcript so far — replayed into the chat pane on resume. */
   chat: ApiChatMessage[];
+  /** Canvas deliverable cards (build options, architecture, cost, etc.) — rendered in the CanvasPane. */
+  cards: ApiSessionCard[];
   /**
    * Convenience count mirroring `chat.length` — used to tell whether a real
    * conversation has started (e.g. so a refresh doesn't re-show the
@@ -103,6 +122,12 @@ export async function listSessions() {
 
 export async function createSession() {
   const res = await fetch('/api/sessions', { method: 'POST', credentials: 'include' });
+  return parseJsonOrError<ApiSession>(res);
+}
+
+/** Fetches one session by id — used to refresh `cards` after a turn emits a card_emitted event. */
+export async function getSession(sessionId: string) {
+  const res = await fetch(`/api/sessions/${sessionId}`, { credentials: 'include' });
   return parseJsonOrError<ApiSession>(res);
 }
 
@@ -297,6 +322,29 @@ export async function sendMessage(sessionId: string, text: string): Promise<Send
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text }),
+  });
+  return res.json();
+}
+
+export type SelectBuildOptionResponse =
+  | { ok: true; card: ApiSessionCard }
+  | { ok: false; error: string };
+
+/**
+ * Locks in a build option directly from the canvas card (Epic 3.1) — the
+ * same effect as asking the agent to do it in chat (select_build_option
+ * tool, render-build-options-tool.ts), just without a round-trip through
+ * the model.
+ */
+export async function selectBuildOption(
+  sessionId: string,
+  index: number,
+): Promise<SelectBuildOptionResponse> {
+  const res = await fetch(`/api/sessions/${sessionId}/cards/options/select`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ index }),
   });
   return res.json();
 }
