@@ -11,6 +11,7 @@ import { createSourcesTools } from './sources-tools.js';
 import { createPhaseTransitionTool } from './phase-transition-tool.js';
 import { createManifestSummaryTool } from './manifest-summary-tool.js';
 import { createRenderBuildOptionsTool } from './render-build-options-tool.js';
+import { createRenderArchitectureTool } from './render-architecture-tool.js';
 import { compactChatHistory } from './conversation-compaction.js';
 import { emitAnalyticsEvent, type AnalyticsLogger } from './analytics.js';
 import type { TurnEvent } from './turn-events.js';
@@ -194,6 +195,45 @@ const BUILT_IN_TOOL_SCHEMAS = {
       required: ['index'],
     },
   },
+  render_architecture: {
+    description:
+      "Present a plain-language system architecture (boxes and arrows) for the chosen build direction — components and how they connect, described the way you'd explain it to a non-technical founder. Never use technical jargon (API, database, backend, server, etc.) in the summary, component names, or descriptions — describe what each piece IS and DOES for the user in plain terms instead. Calling this again replaces the previous architecture rather than adding to it.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        summary: { type: 'string' },
+        components: {
+          type: 'array',
+          minItems: 1,
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              description: { type: 'string' },
+            },
+            required: ['name', 'description'],
+          },
+        },
+        connections: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              from: { type: 'string' },
+              to: { type: 'string' },
+              label: { type: 'string' },
+            },
+            required: ['from', 'to', 'label'],
+          },
+        },
+      },
+      required: ['summary', 'components', 'connections'],
+    },
+  },
+  lock_architecture: {
+    description: 'Lock in the current architecture once the user is happy with it.',
+    inputSchema: { type: 'object', properties: {} },
+  },
 } as const;
 
 function toAnthropicMessages(chat: ChatMessage[]): AnthropicMessageParam[] {
@@ -274,6 +314,11 @@ export function createAgentOrchestrator(deps: AgentOrchestratorDeps) {
       sessionId,
       onEvent: (event) => events.push(event),
     });
+    const architectureTool = createRenderArchitectureTool({
+      store: sessionStore,
+      sessionId,
+      onEvent: (event) => events.push(event),
+    });
     const toolRegistry: ToolRegistry = {
       get_manifest: manifestTools.get_manifest,
       update_manifest: manifestTools.update_manifest,
@@ -283,6 +328,8 @@ export function createAgentOrchestrator(deps: AgentOrchestratorDeps) {
       summarize_manifest: manifestSummaryTool.summarize_manifest,
       render_build_options: buildOptionsTool.render_build_options,
       select_build_option: buildOptionsTool.select_build_option,
+      render_architecture: architectureTool.render_architecture,
+      lock_architecture: architectureTool.lock_architecture,
       ...deps.extraTools,
     };
     const dispatcher = createToolDispatcher({ tools: toolRegistry, logger: silentLogger() });

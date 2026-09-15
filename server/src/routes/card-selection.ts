@@ -4,6 +4,7 @@ import { requireAuth } from './auth.js';
 import { type AuthStore } from '../auth/auth-store.js';
 import { type SessionStore } from '../session-store.js';
 import { createRenderBuildOptionsTool } from '../render-build-options-tool.js';
+import { createRenderArchitectureTool } from '../render-architecture-tool.js';
 
 const selectSchema = z.object({
   index: z.number().int(),
@@ -44,6 +45,36 @@ export function registerCardSelectionRoutes(
         onEvent: () => {},
       });
       const result = await tool.select_build_option({ index: parsed.data.index });
+
+      if (!result.ok) {
+        return reply.status(400).send(result);
+      }
+
+      return reply.status(200).send(result);
+    },
+  );
+
+  /**
+   * Direct architecture-lock route (Epic 3.2): mirrors the options-select
+   * route above — lets the user confirm the architecture directly from the
+   * canvas card rather than only through chat, using the same
+   * lock_architecture logic the agent's tool call uses.
+   */
+  app.post<{ Params: { id: string } }>(
+    '/api/sessions/:id/cards/architecture/lock',
+    { preHandler: auth },
+    async (request, reply) => {
+      const session = await sessionStore.get(request.params.id);
+      if (!session || session.userId !== request.userId) {
+        return reply.status(404).send({ error: 'session_not_found' });
+      }
+
+      const tool = createRenderArchitectureTool({
+        store: sessionStore,
+        sessionId: request.params.id,
+        onEvent: () => {},
+      });
+      const result = await tool.lock_architecture({});
 
       if (!result.ok) {
         return reply.status(400).send(result);

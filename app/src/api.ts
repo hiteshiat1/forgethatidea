@@ -41,6 +41,23 @@ export interface ApiSessionCard {
   content?: unknown;
 }
 
+export interface ArchitectureComponent {
+  name: string;
+  description: string;
+}
+
+export interface ArchitectureConnection {
+  from: string;
+  to: string;
+  label: string;
+}
+
+export interface ArchitectureCardContent {
+  summary: string;
+  components: ArchitectureComponent[];
+  connections: ArchitectureConnection[];
+}
+
 export interface ApiSession {
   id: string;
   userId: string | null;
@@ -345,6 +362,19 @@ export async function selectBuildOption(
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ index }),
+  });
+  return res.json();
+}
+
+export type LockArchitectureResponse =
+  | { ok: true; card: ApiSessionCard }
+  | { ok: false; error: string };
+
+/** Locks in the architecture card directly from the canvas (Epic 3.2). */
+export async function lockArchitecture(sessionId: string): Promise<LockArchitectureResponse> {
+  const res = await fetch(`/api/sessions/${sessionId}/cards/architecture/lock`, {
+    method: 'POST',
+    credentials: 'include',
   });
   return res.json();
 }
