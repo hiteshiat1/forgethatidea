@@ -29,12 +29,15 @@ import {
   getAppArtifact,
   revertAppVersion,
   selectBuildOption,
+  lockArchitecture,
   type AuthUser,
   type ApiSession,
   type ApiSessionCard,
   type BuildOptionsCardContent,
+  type ArchitectureCardContent,
 } from './api.js';
 import { BuildOptionsCard } from './components/BuildOptionsCard.js';
+import { ArchitectureCard } from './components/ArchitectureCard.js';
 
 type Health = { status: string; env: string } | null;
 
@@ -370,6 +373,7 @@ export function App() {
   const [sessions, setSessions] = useState<ApiSession[]>([]);
   const [cards, setCards] = useState<ApiSessionCard[]>([]);
   const [selectingOption, setSelectingOption] = useState(false);
+  const [lockingArchitecture, setLockingArchitecture] = useState(false);
 
   // Seed turnState.phase from the real session once it becomes available,
   // then let handleTurnEvents (below, driven by real message responses) own
@@ -492,6 +496,16 @@ export function App() {
     }
   }
 
+  async function handleLockArchitecture() {
+    if (sessionState.status !== 'ready') return;
+    setLockingArchitecture(true);
+    const result = await lockArchitecture(sessionState.session.id);
+    setLockingArchitecture(false);
+    if (result.ok) {
+      setCards((prev) => prev.map((c) => (c.type === 'architecture' ? result.card : c)));
+    }
+  }
+
   if (sessionState.status === 'checking') {
     return null;
   }
@@ -541,18 +555,33 @@ export function App() {
           />
         ) : onboarded ? (
           <CanvasPane>
-            {cards.map((card, i) =>
-              card.type === 'options' ? (
-                <BuildOptionsCard
-                  key={card.id}
-                  index={i + 1}
-                  status={card.status}
-                  content={card.content as BuildOptionsCardContent}
-                  onSelect={handleSelectBuildOption}
-                  selecting={selectingOption}
-                />
-              ) : null,
-            )}
+            {cards.map((card, i) => {
+              if (card.type === 'options') {
+                return (
+                  <BuildOptionsCard
+                    key={card.id}
+                    index={i + 1}
+                    status={card.status}
+                    content={card.content as BuildOptionsCardContent}
+                    onSelect={handleSelectBuildOption}
+                    selecting={selectingOption}
+                  />
+                );
+              }
+              if (card.type === 'architecture') {
+                return (
+                  <ArchitectureCard
+                    key={card.id}
+                    index={i + 1}
+                    status={card.status}
+                    content={card.content as ArchitectureCardContent}
+                    onLock={handleLockArchitecture}
+                    locking={lockingArchitecture}
+                  />
+                );
+              }
+              return null;
+            })}
           </CanvasPane>
         ) : (
           <Onboarding

@@ -1,0 +1,40 @@
+/* Architecture card (Epic 3.2). */
+
+.architecture-card__summary {
+  margin: 0 0 var(--forge-space-3);
+  color: var(--forge-slate-200);
+}
+
+.architecture-card__boxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--forge-space-3);
+  margin-bottom: var(--forge-space-3);
+}
+
+.architecture-card__box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 160px;
+  padding: var(--forge-space-3);
+  border-radius: var(--forge-radius-md);
+  border: 1px solid var(--forge-ink-500);
+  background: var(--forge-ink-800);
+}
+
+.architecture-card__box-name {
+  font-weight: 600;
+}
+
+.architecture-card__box-description {
+  font-size: 0.875rem;
+  color: var(--forge-slate-300);
+}
+
+.architecture-card__connections {
+  margin: 0 0 var(--forge-space-3);
+  padding-left: 1.25em;
+  font-size: 0.875rem;
+  color: var(--forge-slate-300);
+}

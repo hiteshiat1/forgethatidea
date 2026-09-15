@@ -152,3 +152,76 @@ describe('POST /api/sessions/:id/cards/options/select (#44)', () => {
     expect(res.statusCode).toBe(400);
   });
 });
+
+describe('POST /api/sessions/:id/cards/architecture/lock (#45)', () => {
+  it('rejects an anonymous request', async () => {
+    const { app } = await buildTestApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sessions/whatever/cards/architecture/lock',
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('404s for a session belonging to a different user', async () => {
+    const { app, sessionStore } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+    const session = await sessionStore.create('someone-else');
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${session.id}/cards/architecture/lock`,
+      headers: { cookie: authCookie },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('400s when no architecture card exists yet', async () => {
+    const { app, sessionStore } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+    const meRes = await app.inject({
+      method: 'GET',
+      url: '/api/auth/me',
+      headers: { cookie: authCookie },
+    });
+    const session = await sessionStore.create(meRes.json().id);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${session.id}/cards/architecture/lock`,
+      headers: { cookie: authCookie },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ ok: false, error: 'no_architecture_card' });
+  });
+
+  it('locks the architecture card', async () => {
+    const { app, sessionStore } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+    const meRes = await app.inject({
+      method: 'GET',
+      url: '/api/auth/me',
+      headers: { cookie: authCookie },
+    });
+    const session = await sessionStore.create(meRes.json().id);
+    await sessionStore.update(session.id, {
+      cards: [
+        {
+          id: 'arch-1',
+          type: 'architecture',
+          status: 'draft',
+          content: { summary: 'plain summary', components: [], connections: [] },
+        },
+      ],
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${session.id}/cards/architecture/lock`,
+      headers: { cookie: authCookie },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ ok: true, card: { status: 'locked' } });
+  });
+});
