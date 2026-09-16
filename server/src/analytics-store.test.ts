@@ -3,6 +3,7 @@ import {
   createInMemoryAnalyticsStore,
   createPersistingAnalyticsLogger,
   queryRefinementFunnel,
+  queryBuildFailureReport,
 } from './analytics-store.js';
 
 describe('createPersistingAnalyticsLogger (#95)', () => {
@@ -158,5 +159,166 @@ describe('queryRefinementFunnel (#95)', () => {
     expect(result.gateHitRate).toBe(0);
     expect(result.gateToExportRate).toBe(0);
     expect(result.roundsUsedDistribution).toEqual({ app: {}, marketing: {} });
+  });
+});
+
+describe('queryBuildFailureReport (#83)', () => {
+  async function logger(store: ReturnType<typeof createInMemoryAnalyticsStore>) {
+    return createPersistingAnalyticsLogger(store, { info: () => {} });
+  }
+
+  it('aggregates failure counts by archetype and cause', async () => {
+    const store = createInMemoryAnalyticsStore();
+    const log = await logger(store);
+
+    log.info(
+      {
+        analytics_event: true,
+        type: 'build_failed',
+        sessionId: 's1',
+        archetype: 'crud-tracker',
+        cause: 'validation_failed_after_repairs',
+        repairRounds: 2,
+      },
+      'analytics.build_failed',
+    );
+    log.info(
+      {
+        analytics_event: true,
+        type: 'build_failed',
+        sessionId: 's2',
+        archetype: 'crud-tracker',
+        cause: 'validation_failed_after_repairs',
+        repairRounds: 2,
+      },
+      'analytics.build_failed',
+    );
+    log.info(
+      {
+        analytics_event: true,
+        type: 'build_failed',
+        sessionId: 's3',
+        archetype: 'dashboard',
+        cause: 'content_blocked',
+        repairRounds: 0,
+      },
+      'analytics.build_failed',
+    );
+
+    const result = await queryBuildFailureReport(store);
+
+    expect(result.failuresByArchetype['crud-tracker']).toBe(2);
+    expect(result.failuresByArchetype['dashboard']).toBe(1);
+    expect(result.failuresByCause['validation_failed_after_repairs']).toBe(2);
+    expect(result.failuresByCause['content_blocked']).toBe(1);
+  });
+
+  it('computes repair-loop success rate as builds needing 0 repair rounds over all successful builds', async () => {
+    const store = createInMemoryAnalyticsStore();
+    const log = await logger(store);
+
+    log.info(
+      {
+        analytics_event: true,
+        type: 'build_succeeded',
+        sessionId: 's1',
+        archetype: 'crud-tracker',
+        repairRounds: 0,
+      },
+      'analytics.build_succeeded',
+    );
+    log.info(
+      {
+        analytics_event: true,
+        type: 'build_succeeded',
+        sessionId: 's2',
+        archetype: 'crud-tracker',
+        repairRounds: 1,
+      },
+      'analytics.build_succeeded',
+    );
+    log.info(
+      {
+        analytics_event: true,
+        type: 'build_succeeded',
+        sessionId: 's3',
+        archetype: 'crud-tracker',
+        repairRounds: 0,
+      },
+      'analytics.build_succeeded',
+    );
+
+    const result = await queryBuildFailureReport(store);
+
+    expect(result.cleanFirstTryRate).toBeCloseTo(2 / 3);
+    expect(result.totalSucceeded).toBe(3);
+  });
+
+  it('computes an overall failure rate across successes and failures', async () => {
+    const store = createInMemoryAnalyticsStore();
+    const log = await logger(store);
+
+    log.info(
+      {
+        analytics_event: true,
+        type: 'build_succeeded',
+        sessionId: 's1',
+        archetype: 'crud-tracker',
+        repairRounds: 0,
+      },
+      'analytics.build_succeeded',
+    );
+    log.info(
+      {
+        analytics_event: true,
+        type: 'build_failed',
+        sessionId: 's2',
+        archetype: 'crud-tracker',
+        cause: 'generation_failed',
+        repairRounds: 2,
+      },
+      'analytics.build_failed',
+    );
+    log.info(
+      {
+        analytics_event: true,
+        type: 'build_failed',
+        sessionId: 's3',
+        archetype: 'crud-tracker',
+        cause: 'generation_failed',
+        repairRounds: 2,
+      },
+      'analytics.build_failed',
+    );
+    log.info(
+      {
+        analytics_event: true,
+        type: 'build_failed',
+        sessionId: 's4',
+        archetype: 'crud-tracker',
+        cause: 'generation_failed',
+        repairRounds: 2,
+      },
+      'analytics.build_failed',
+    );
+
+    const result = await queryBuildFailureReport(store);
+
+    expect(result.totalSucceeded).toBe(1);
+    expect(result.totalFailed).toBe(3);
+    expect(result.failureRate).toBeCloseTo(0.75);
+  });
+
+  it('returns zero rates rather than NaN when no builds have happened yet', async () => {
+    const store = createInMemoryAnalyticsStore();
+
+    const result = await queryBuildFailureReport(store);
+
+    expect(result.failureRate).toBe(0);
+    expect(result.cleanFirstTryRate).toBe(0);
+    expect(result.totalSucceeded).toBe(0);
+    expect(result.totalFailed).toBe(0);
+    expect(result.failuresByArchetype).toEqual({});
+    expect(result.failuresByCause).toEqual({});
   });
 });

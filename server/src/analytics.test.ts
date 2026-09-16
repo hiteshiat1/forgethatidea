@@ -120,6 +120,52 @@ describe('emitAnalyticsEvent (#42)', () => {
     );
   });
 
+  it('logs a build_failed event with archetype/cause/repairRounds (#83)', () => {
+    const logger = { info: vi.fn() };
+
+    emitAnalyticsEvent(logger, {
+      type: 'build_failed',
+      sessionId: 'session-1',
+      archetype: 'crud-tracker',
+      cause: 'validation_failed_after_repairs',
+      repairRounds: 2,
+    });
+
+    expect(logger.info).toHaveBeenCalledWith(
+      {
+        analytics_event: true,
+        type: 'build_failed',
+        sessionId: 'session-1',
+        archetype: 'crud-tracker',
+        cause: 'validation_failed_after_repairs',
+        repairRounds: 2,
+      },
+      'analytics.build_failed',
+    );
+  });
+
+  it('logs a build_succeeded event with archetype/repairRounds (#83)', () => {
+    const logger = { info: vi.fn() };
+
+    emitAnalyticsEvent(logger, {
+      type: 'build_succeeded',
+      sessionId: 'session-1',
+      archetype: 'dashboard',
+      repairRounds: 0,
+    });
+
+    expect(logger.info).toHaveBeenCalledWith(
+      {
+        analytics_event: true,
+        type: 'build_succeeded',
+        sessionId: 'session-1',
+        archetype: 'dashboard',
+        repairRounds: 0,
+      },
+      'analytics.build_succeeded',
+    );
+  });
+
   it('never includes anything beyond sessionId, event-specific structural fields, and the type', () => {
     const logger = { info: vi.fn() };
 

@@ -104,6 +104,16 @@ export function createBuildOrchestrator(deps: BuildOrchestratorDeps) {
 
     const specResult = compileGenerationSpec(frozenManifest.data);
     if (isCompileSpecFailure(specResult)) {
+      // The archetype is derived *during* spec compilation — a failure here
+      // means it was never determined, so 'unknown' is the honest value
+      // rather than guessing (Epic 4.22's "aggregated by cause").
+      emitAnalyticsEvent(analyticsLogger, {
+        type: 'build_failed',
+        sessionId,
+        archetype: 'unknown',
+        cause: 'spec_compile_failed',
+        repairRounds: 0,
+      });
       return { ok: false, error: 'build_failed', reason: specResult.details.join('; ') };
     }
 
@@ -120,6 +130,13 @@ export function createBuildOrchestrator(deps: BuildOrchestratorDeps) {
       allowed: screening.decision.allowed,
     });
     if (!screening.decision.allowed) {
+      emitAnalyticsEvent(analyticsLogger, {
+        type: 'build_failed',
+        sessionId,
+        archetype: specResult.spec.archetype,
+        cause: 'content_blocked',
+        repairRounds: 0,
+      });
       return { ok: false, error: 'content_blocked', reason: screening.decision.reason };
     }
 
@@ -134,6 +151,13 @@ export function createBuildOrchestrator(deps: BuildOrchestratorDeps) {
     });
 
     if (isAutoRepairFailure(repairResult)) {
+      emitAnalyticsEvent(analyticsLogger, {
+        type: 'build_failed',
+        sessionId,
+        archetype: specResult.spec.archetype,
+        cause: repairResult.error,
+        repairRounds: repairResult.repairRounds,
+      });
       return { ok: false, error: 'build_failed', reason: repairResult.error };
     }
 
@@ -153,6 +177,13 @@ export function createBuildOrchestrator(deps: BuildOrchestratorDeps) {
       },
     });
     await sessionStore.update(sessionId, { activeAppVersion: saved.version });
+
+    emitAnalyticsEvent(analyticsLogger, {
+      type: 'build_succeeded',
+      sessionId,
+      archetype: specResult.spec.archetype,
+      repairRounds: repairResult.repairRounds,
+    });
 
     return {
       ok: true,

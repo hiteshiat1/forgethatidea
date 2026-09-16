@@ -65,13 +65,50 @@ export interface GateShownEvent {
   limit: number;
 }
 
+/**
+ * Fires whenever handleBuild (build-orchestrator.ts) resolves to a
+ * BuildFailure — one clean signal per failed build, from the exact call
+ * site that already knows the archetype and cause (Epic 4.22's "aggregated
+ * by cause"). `cause` mirrors the specific failure modes already tracked as
+ * typed errors elsewhere (CompileSpecFailure/AutoRepairFailure/content
+ * safety) rather than inventing a new taxonomy.
+ */
+export interface BuildFailedEvent {
+  type: 'build_failed';
+  sessionId: string;
+  /** 'unknown' only for spec_compile_failed — the archetype is derived *during* spec compilation, so a failure there means it was never determined. */
+  archetype: string;
+  cause:
+    | 'spec_compile_failed'
+    | 'content_blocked'
+    | 'generation_failed'
+    | 'validation_failed_after_repairs';
+  /** How many repair rounds were attempted before giving up — 0 for failures before generation ever ran (e.g. spec_compile_failed, content_blocked). */
+  repairRounds: number;
+}
+
+/**
+ * Fires on a successful build — the paired "denominator" event alongside
+ * build_failed, so a failure *rate* by archetype is actually computable
+ * (Epic 4.22) rather than only ever seeing failure counts in isolation.
+ */
+export interface BuildSucceededEvent {
+  type: 'build_succeeded';
+  sessionId: string;
+  archetype: string;
+  /** 0 means it validated cleanly on the first attempt — a live signal of repair-loop effectiveness (Epic 4.22's "repair-loop success rate"). */
+  repairRounds: number;
+}
+
 export type AnalyticsEvent =
   | PhaseEnteredEvent
   | RefinementUsedEvent
   | SessionConvertedEvent
   | AppExportedEvent
   | ContentScreenedEvent
-  | GateShownEvent;
+  | GateShownEvent
+  | BuildFailedEvent
+  | BuildSucceededEvent;
 
 export interface AnalyticsLogger {
   info(obj: Record<string, unknown>, msg?: string): void;
