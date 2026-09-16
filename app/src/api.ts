@@ -76,6 +76,20 @@ export interface CostTableCardContent {
   scales: CostScale[];
 }
 
+export interface MarketingPlan {
+  name: string;
+  icp: string;
+  gtm: string;
+  seo: string;
+  ads: string;
+  competitors: string[];
+}
+
+export interface MarketingPlansCardContent {
+  plans: MarketingPlan[];
+  selectedIndex: number | null;
+}
+
 export interface ApiSession {
   id: string;
   userId: string | null;
@@ -406,6 +420,24 @@ export async function lockCostTable(sessionId: string): Promise<LockCostTableRes
   const res = await fetch(`/api/sessions/${sessionId}/cards/cost/lock`, {
     method: 'POST',
     credentials: 'include',
+  });
+  return res.json();
+}
+
+export type SelectMarketingPlanResponse =
+  | { ok: true; card: ApiSessionCard }
+  | { ok: false; error: string };
+
+/** Locks in a marketing plan directly from the canvas card (Epic 3.5). */
+export async function selectMarketingPlan(
+  sessionId: string,
+  index: number,
+): Promise<SelectMarketingPlanResponse> {
+  const res = await fetch(`/api/sessions/${sessionId}/cards/marketing/select`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ index }),
   });
   return res.json();
 }

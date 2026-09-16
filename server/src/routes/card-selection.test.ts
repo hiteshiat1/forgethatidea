@@ -298,3 +298,122 @@ describe('POST /api/sessions/:id/cards/cost/lock (#47)', () => {
     expect(res.json()).toMatchObject({ ok: true, card: { status: 'locked' } });
   });
 });
+
+describe('POST /api/sessions/:id/cards/marketing/select (#48)', () => {
+  it('rejects an anonymous request', async () => {
+    const { app } = await buildTestApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sessions/whatever/cards/marketing/select',
+      payload: { index: 0 },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('404s for a session belonging to a different user', async () => {
+    const { app, sessionStore } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+    const session = await sessionStore.create('someone-else');
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${session.id}/cards/marketing/select`,
+      headers: { cookie: authCookie },
+      payload: { index: 0 },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('400s when no marketing card exists yet', async () => {
+    const { app, sessionStore } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+    const meRes = await app.inject({
+      method: 'GET',
+      url: '/api/auth/me',
+      headers: { cookie: authCookie },
+    });
+    const session = await sessionStore.create(meRes.json().id);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${session.id}/cards/marketing/select`,
+      headers: { cookie: authCookie },
+      payload: { index: 0 },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ ok: false, error: 'no_marketing_card' });
+  });
+
+  it('locks the plan at the given index', async () => {
+    const { app, sessionStore } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+    const meRes = await app.inject({
+      method: 'GET',
+      url: '/api/auth/me',
+      headers: { cookie: authCookie },
+    });
+    const session = await sessionStore.create(meRes.json().id);
+    await sessionStore.update(session.id, {
+      cards: [
+        {
+          id: 'marketing-1',
+          type: 'marketing',
+          status: 'draft',
+          content: {
+            plans: [
+              { name: 'A', icp: 'x', gtm: 'x', seo: 'x', ads: 'x', competitors: ['Acme'] },
+              { name: 'B', icp: 'x', gtm: 'x', seo: 'x', ads: 'x', competitors: ['Acme'] },
+            ],
+            selectedIndex: null,
+          },
+        },
+      ],
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${session.id}/cards/marketing/select`,
+      headers: { cookie: authCookie },
+      payload: { index: 1 },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ ok: true, card: { status: 'locked' } });
+    const updated = await sessionStore.get(session.id);
+    const card = updated!.cards[0] as { content: { selectedIndex: number } };
+    expect(card.content.selectedIndex).toBe(1);
+  });
+
+  it('400s for an out-of-range index', async () => {
+    const { app, sessionStore } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+    const meRes = await app.inject({
+      method: 'GET',
+      url: '/api/auth/me',
+      headers: { cookie: authCookie },
+    });
+    const session = await sessionStore.create(meRes.json().id);
+    await sessionStore.update(session.id, {
+      cards: [
+        {
+          id: 'marketing-1',
+          type: 'marketing',
+          status: 'draft',
+          content: {
+            plans: [{ name: 'A', icp: 'x', gtm: 'x', seo: 'x', ads: 'x', competitors: ['Acme'] }],
+            selectedIndex: null,
+          },
+        },
+      ],
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${session.id}/cards/marketing/select`,
+      headers: { cookie: authCookie },
+      payload: { index: 9 },
+    });
+
+    expect(res.statusCode).toBe(400);
+  });
+});

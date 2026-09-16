@@ -31,16 +31,19 @@ import {
   selectBuildOption,
   lockArchitecture,
   lockCostTable,
+  selectMarketingPlan,
   type AuthUser,
   type ApiSession,
   type ApiSessionCard,
   type BuildOptionsCardContent,
   type ArchitectureCardContent,
   type CostTableCardContent,
+  type MarketingPlansCardContent,
 } from './api.js';
 import { BuildOptionsCard } from './components/BuildOptionsCard.js';
 import { ArchitectureCard } from './components/ArchitectureCard.js';
 import { CostTableCard } from './components/CostTableCard.js';
+import { MarketingPlansCard } from './components/MarketingPlansCard.js';
 
 type Health = { status: string; env: string } | null;
 
@@ -378,6 +381,7 @@ export function App() {
   const [selectingOption, setSelectingOption] = useState(false);
   const [lockingArchitecture, setLockingArchitecture] = useState(false);
   const [lockingCostTable, setLockingCostTable] = useState(false);
+  const [selectingMarketingPlan, setSelectingMarketingPlan] = useState(false);
 
   // Seed turnState.phase from the real session once it becomes available,
   // then let handleTurnEvents (below, driven by real message responses) own
@@ -520,6 +524,16 @@ export function App() {
     }
   }
 
+  async function handleSelectMarketingPlan(index: number) {
+    if (sessionState.status !== 'ready') return;
+    setSelectingMarketingPlan(true);
+    const result = await selectMarketingPlan(sessionState.session.id, index);
+    setSelectingMarketingPlan(false);
+    if (result.ok) {
+      setCards((prev) => prev.map((c) => (c.type === 'marketing' ? result.card : c)));
+    }
+  }
+
   if (sessionState.status === 'checking') {
     return null;
   }
@@ -603,6 +617,18 @@ export function App() {
                     content={card.content as CostTableCardContent}
                     onLock={handleLockCostTable}
                     locking={lockingCostTable}
+                  />
+                );
+              }
+              if (card.type === 'marketing') {
+                return (
+                  <MarketingPlansCard
+                    key={card.id}
+                    index={i + 1}
+                    status={card.status}
+                    content={card.content as MarketingPlansCardContent}
+                    onSelect={handleSelectMarketingPlan}
+                    selecting={selectingMarketingPlan}
                   />
                 );
               }

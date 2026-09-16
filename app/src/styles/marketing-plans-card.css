@@ -1,0 +1,71 @@
+/* Marketing plans comparison card (Epic 3.5). */
+
+.marketing-plans-card__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--forge-space-3);
+}
+
+.marketing-plans-card__plan {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--forge-space-2);
+  padding: var(--forge-space-3);
+  border-radius: var(--forge-radius-md);
+  border: 1px solid var(--forge-ink-500);
+  background: var(--forge-ink-800);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.marketing-plans-card__plan:hover:not(:disabled) {
+  border-color: var(--forge-signal-amber);
+}
+
+.marketing-plans-card__plan:disabled {
+  cursor: default;
+}
+
+.marketing-plans-card__plan--selected {
+  border-color: var(--forge-signal-amber);
+  background: var(--forge-ink-700);
+}
+
+.marketing-plans-card__plan-name {
+  font-weight: 600;
+}
+
+.marketing-plans-card__plan-details {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--forge-slate-300);
+}
+
+.marketing-plans-card__plan-details dt {
+  font-weight: 600;
+  color: var(--forge-slate-400);
+  margin-top: 4px;
+}
+
+.marketing-plans-card__plan-details dd {
+  margin: 0;
+}
+
+.marketing-plans-card__competitors {
+  font-size: 0.75rem;
+  color: var(--forge-slate-400);
+  font-style: italic;
+}
+
+.marketing-plans-card__badge {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: var(--forge-radius-pill);
+  background: var(--forge-signal-amber);
+  color: var(--forge-ink-900);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
