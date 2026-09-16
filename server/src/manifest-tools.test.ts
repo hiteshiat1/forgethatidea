@@ -68,12 +68,23 @@ describe('update_manifest', () => {
     expect(latest!.version).toBe(2);
   });
 
-  it('rejects a partial update with no existing manifest to merge into', async () => {
+  it('rejects a partial update with no existing manifest to merge into, and surfaces which fields are actually missing/invalid', async () => {
     const store = createInMemoryManifestStore();
     const tools = createManifestTools({ store, sessionId: 'session-1' });
 
     const result = await tools.update_manifest({ patch: { productName: 'Solo field' } });
+
     expect(result).toMatchObject({ ok: false, error: 'no_manifest_to_merge_into' });
+    // Real validation detail, not a silent/opaque rejection — the model
+    // (or a human caller) needs to know exactly what's still missing to
+    // build a valid first manifest, since incremental single-field patches
+    // are otherwise indistinguishable from "wrong input entirely".
+    if (result.ok || result.error !== 'no_manifest_to_merge_into') {
+      throw new Error('expected no_manifest_to_merge_into');
+    }
+    expect(result.details.length).toBeGreaterThan(0);
+    expect(result.details.some((d) => d.includes('icp'))).toBe(true);
+    expect(result.details.some((d) => d.includes('entities'))).toBe(true);
   });
 
   it('rejects an update that produces an invalid merged manifest, without persisting it', async () => {

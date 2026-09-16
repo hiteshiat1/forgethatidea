@@ -130,7 +130,7 @@ const BUILT_IN_TOOL_SCHEMAS = {
   },
   update_manifest: {
     description:
-      'Apply a partial update to the build manifest, merging it into whatever exists already.',
+      "Apply an update to the build manifest. IMPORTANT: if no manifest exists yet for this session (check with get_manifest first), your patch must be a COMPLETE manifest in one call — productName, icp, at least one entity (with at least one field each), at least one screen, at least one role, at least one key action, and branding (accentColor as a 6-digit hex, plus tone). A partial/single-field patch will be rejected when there's nothing yet to merge it into. Once a manifest exists, later calls may send just the fields you're changing — those genuinely merge into what's there.",
     inputSchema: {
       type: 'object',
       properties: { patch: { type: 'object' } },
