@@ -13,7 +13,7 @@ export interface GetManifestResult {
 
 export type UpdateManifestResult =
   | { ok: true; manifest: BuildManifest; version: number }
-  | { ok: false; error: 'no_manifest_to_merge_into' }
+  | { ok: false; error: 'no_manifest_to_merge_into'; details: string[] }
   | { ok: false; error: 'validation_failed'; details: string[] }
   | { ok: false; error: 'invalid_input' };
 
@@ -92,7 +92,11 @@ export function createManifestTools(deps: ManifestToolsDeps) {
       if (!validation.ok) {
         // A patch this small being invalid on its own almost always means
         // the caller meant to merge into something that doesn't exist yet.
-        return { ok: false, error: 'no_manifest_to_merge_into' };
+        // Surface the real validation errors (not just the generic error
+        // code) so the caller — usually the agent, incrementally building
+        // the manifest field-by-field — knows exactly what's still missing
+        // rather than silently retrying the same rejected shape.
+        return { ok: false, error: 'no_manifest_to_merge_into', details: validation.errors! };
       }
       const saved = await store.save(sessionId, validation.data!);
       return { ok: true, manifest: saved.data, version: saved.version };
