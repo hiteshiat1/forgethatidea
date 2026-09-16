@@ -6,6 +6,7 @@ import { type SessionStore } from '../session-store.js';
 import { createRenderBuildOptionsTool } from '../render-build-options-tool.js';
 import { createRenderArchitectureTool } from '../render-architecture-tool.js';
 import { createRenderCostTableTool } from '../render-cost-table-tool.js';
+import { createRenderMarketingPlansTool } from '../render-marketing-plans-tool.js';
 
 const selectSchema = z.object({
   index: z.number().int(),
@@ -106,6 +107,41 @@ export function registerCardSelectionRoutes(
         onEvent: () => {},
       });
       const result = await tool.lock_cost_table({});
+
+      if (!result.ok) {
+        return reply.status(400).send(result);
+      }
+
+      return reply.status(200).send(result);
+    },
+  );
+
+  /**
+   * Direct marketing-plan-selection route (Epic 3.5): mirrors the
+   * options-select route above — lets the user click a plan straight on
+   * the marketing-plans card, using the same select_marketing_plan logic
+   * the agent's tool call uses.
+   */
+  app.post<{ Params: { id: string } }>(
+    '/api/sessions/:id/cards/marketing/select',
+    { preHandler: auth },
+    async (request, reply) => {
+      const parsed = selectSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: 'validation_failed' });
+      }
+
+      const session = await sessionStore.get(request.params.id);
+      if (!session || session.userId !== request.userId) {
+        return reply.status(404).send({ error: 'session_not_found' });
+      }
+
+      const tool = createRenderMarketingPlansTool({
+        store: sessionStore,
+        sessionId: request.params.id,
+        onEvent: () => {},
+      });
+      const result = await tool.select_marketing_plan({ index: parsed.data.index });
 
       if (!result.ok) {
         return reply.status(400).send(result);

@@ -13,6 +13,7 @@ import { createManifestSummaryTool } from './manifest-summary-tool.js';
 import { createRenderBuildOptionsTool } from './render-build-options-tool.js';
 import { createRenderArchitectureTool } from './render-architecture-tool.js';
 import { createRenderCostTableTool } from './render-cost-table-tool.js';
+import { createRenderMarketingPlansTool } from './render-marketing-plans-tool.js';
 import { compactChatHistory } from './conversation-compaction.js';
 import { emitAnalyticsEvent, type AnalyticsLogger } from './analytics.js';
 import type { TurnEvent } from './turn-events.js';
@@ -287,6 +288,42 @@ const BUILT_IN_TOOL_SCHEMAS = {
       },
     },
   },
+  render_marketing_plans: {
+    description:
+      'Present exactly 3 marketing plan directions, each covering the ideal customer profile (icp), go-to-market approach (gtm), SEO angle, and ads angle. Each plan must name at least one real competitor it positions against — use web_search first to find and confirm real competitors rather than inventing names. Calling this again replaces the previous set of plans rather than adding to it.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        plans: {
+          type: 'array',
+          minItems: 3,
+          maxItems: 3,
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              icp: { type: 'string' },
+              gtm: { type: 'string' },
+              seo: { type: 'string' },
+              ads: { type: 'string' },
+              competitors: { type: 'array', items: { type: 'string' }, minItems: 1 },
+            },
+            required: ['name', 'icp', 'gtm', 'seo', 'ads', 'competitors'],
+          },
+        },
+      },
+      required: ['plans'],
+    },
+  },
+  select_marketing_plan: {
+    description:
+      "Lock in the user's chosen marketing plan once they've picked one from the presented plans (0-based index).",
+    inputSchema: {
+      type: 'object',
+      properties: { index: { type: 'number' } },
+      required: ['index'],
+    },
+  },
 } as const;
 
 function toAnthropicMessages(chat: ChatMessage[]): AnthropicMessageParam[] {
@@ -377,6 +414,11 @@ export function createAgentOrchestrator(deps: AgentOrchestratorDeps) {
       sessionId,
       onEvent: (event) => events.push(event),
     });
+    const marketingPlansTool = createRenderMarketingPlansTool({
+      store: sessionStore,
+      sessionId,
+      onEvent: (event) => events.push(event),
+    });
     const toolRegistry: ToolRegistry = {
       get_manifest: manifestTools.get_manifest,
       update_manifest: manifestTools.update_manifest,
@@ -390,6 +432,8 @@ export function createAgentOrchestrator(deps: AgentOrchestratorDeps) {
       lock_architecture: architectureTool.lock_architecture,
       render_cost_table: costTableTool.render_cost_table,
       lock_cost_table: costTableTool.lock_cost_table,
+      render_marketing_plans: marketingPlansTool.render_marketing_plans,
+      select_marketing_plan: marketingPlansTool.select_marketing_plan,
       ...deps.extraTools,
     };
     const dispatcher = createToolDispatcher({ tools: toolRegistry, logger: silentLogger() });
