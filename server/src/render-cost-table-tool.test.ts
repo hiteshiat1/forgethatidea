@@ -176,6 +176,20 @@ describe('render_cost_table tool (#47)', () => {
     ).toBe('100 users (revised)');
   });
 
+  it('moves the card to refined status on re-render (chat-based refinement, #49)', async () => {
+    const { sessionStore, onEvent } = buildDeps();
+    const session = await sessionStore.create('user-1');
+    const tool = createRenderCostTableTool({ store: sessionStore, sessionId: session.id, onEvent });
+
+    const first = await tool.render_cost_table(VALID_INPUT);
+    expect(first.ok && first.card.status).toBe('draft');
+
+    const second = await tool.render_cost_table({
+      scales: [{ ...VALID_INPUT.scales[0]!, label: '100 users (revised)' }],
+    });
+    expect(second.ok && second.card.status).toBe('refined');
+  });
+
   it('404s (session_not_found) for a nonexistent session', async () => {
     const { sessionStore, onEvent } = buildDeps();
     const tool = createRenderCostTableTool({

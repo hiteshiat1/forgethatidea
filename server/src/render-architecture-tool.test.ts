@@ -141,6 +141,25 @@ describe('render_architecture tool (#45)', () => {
     );
   });
 
+  it('moves the card to refined status on re-render (chat-based refinement, #49)', async () => {
+    const { sessionStore, onEvent } = buildDeps();
+    const session = await sessionStore.create('user-1');
+    const tool = createRenderArchitectureTool({
+      store: sessionStore,
+      sessionId: session.id,
+      onEvent,
+    });
+
+    const first = await tool.render_architecture(VALID_INPUT);
+    expect(first.ok && first.card.status).toBe('draft');
+
+    const second = await tool.render_architecture({
+      ...VALID_INPUT,
+      summary: VALID_INPUT.summary + ' Updated.',
+    });
+    expect(second.ok && second.card.status).toBe('refined');
+  });
+
   it('404s (session_not_found) for a nonexistent session', async () => {
     const { sessionStore, onEvent } = buildDeps();
     const tool = createRenderArchitectureTool({

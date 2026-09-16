@@ -103,6 +103,24 @@ describe('render_build_options tool (#44)', () => {
     );
   });
 
+  it('moves the card to refined status on re-render (chat-based refinement, #49)', async () => {
+    const { sessionStore, onEvent } = buildDeps();
+    const session = await sessionStore.create('user-1');
+    const tool = createRenderBuildOptionsTool({
+      store: sessionStore,
+      sessionId: session.id,
+      onEvent,
+    });
+
+    const first = await tool.render_build_options({ options: THREE_OPTIONS });
+    expect(first.ok && first.card.status).toBe('draft');
+
+    const second = await tool.render_build_options({
+      options: THREE_OPTIONS.map((o) => ({ ...o, name: `${o.name} v2` })),
+    });
+    expect(second.ok && second.card.status).toBe('refined');
+  });
+
   it('preserves other card types already on the session', async () => {
     const { sessionStore, onEvent } = buildDeps();
     const session = await sessionStore.create('user-1');

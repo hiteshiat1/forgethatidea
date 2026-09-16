@@ -92,7 +92,10 @@ export function createRenderBuildOptionsTool(deps: RenderBuildOptionsToolDeps) {
     const card: SessionCard & { content: BuildOptionsCardContent } = {
       id: existing?.id ?? randomUUID(),
       type: CARD_TYPE,
-      status: 'draft',
+      // First render is a fresh 'draft'; any later re-render (the user
+      // asked for changes in chat before locking, #49's refinement loop)
+      // moves it to 'refined' so the UI reflects it's been iterated on.
+      status: existing ? 'refined' : 'draft',
       content: { options: rawInput.options, selectedIndex: null },
     };
 
