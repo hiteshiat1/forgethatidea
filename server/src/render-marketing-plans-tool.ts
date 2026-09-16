@@ -104,7 +104,9 @@ export function createRenderMarketingPlansTool(deps: RenderMarketingPlansToolDep
     const card: SessionCard & { content: MarketingPlansCardContent } = {
       id: existing?.id ?? randomUUID(),
       type: CARD_TYPE,
-      status: 'draft',
+      // First render is a fresh 'draft'; any later re-render (chat-based
+      // refinement before locking, #49) moves it to 'refined'.
+      status: existing ? 'refined' : 'draft',
       content: { plans: rawInput.plans, selectedIndex: null },
     };
 
