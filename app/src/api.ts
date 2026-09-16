@@ -58,6 +58,24 @@ export interface ArchitectureCardContent {
   connections: ArchitectureConnection[];
 }
 
+export interface CostLineItem {
+  name: string;
+  monthlyCostCents: number;
+  assumption: string;
+  sourceUrl: string;
+}
+
+export interface CostScale {
+  label: string;
+  lineItems: CostLineItem[];
+  totalMonthlyCostCents: number;
+  totalYearlyCostCents: number;
+}
+
+export interface CostTableCardContent {
+  scales: CostScale[];
+}
+
 export interface ApiSession {
   id: string;
   userId: string | null;
@@ -373,6 +391,19 @@ export type LockArchitectureResponse =
 /** Locks in the architecture card directly from the canvas (Epic 3.2). */
 export async function lockArchitecture(sessionId: string): Promise<LockArchitectureResponse> {
   const res = await fetch(`/api/sessions/${sessionId}/cards/architecture/lock`, {
+    method: 'POST',
+    credentials: 'include',
+  });
+  return res.json();
+}
+
+export type LockCostTableResponse =
+  | { ok: true; card: ApiSessionCard }
+  | { ok: false; error: string };
+
+/** Locks in the cost table card directly from the canvas (Epic 3.4). */
+export async function lockCostTable(sessionId: string): Promise<LockCostTableResponse> {
+  const res = await fetch(`/api/sessions/${sessionId}/cards/cost/lock`, {
     method: 'POST',
     credentials: 'include',
   });

@@ -225,3 +225,76 @@ describe('POST /api/sessions/:id/cards/architecture/lock (#45)', () => {
     expect(res.json()).toMatchObject({ ok: true, card: { status: 'locked' } });
   });
 });
+
+describe('POST /api/sessions/:id/cards/cost/lock (#47)', () => {
+  it('rejects an anonymous request', async () => {
+    const { app } = await buildTestApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sessions/whatever/cards/cost/lock',
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('404s for a session belonging to a different user', async () => {
+    const { app, sessionStore } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+    const session = await sessionStore.create('someone-else');
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${session.id}/cards/cost/lock`,
+      headers: { cookie: authCookie },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('400s when no cost card exists yet', async () => {
+    const { app, sessionStore } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+    const meRes = await app.inject({
+      method: 'GET',
+      url: '/api/auth/me',
+      headers: { cookie: authCookie },
+    });
+    const session = await sessionStore.create(meRes.json().id);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${session.id}/cards/cost/lock`,
+      headers: { cookie: authCookie },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ ok: false, error: 'no_cost_card' });
+  });
+
+  it('locks the cost card', async () => {
+    const { app, sessionStore } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+    const meRes = await app.inject({
+      method: 'GET',
+      url: '/api/auth/me',
+      headers: { cookie: authCookie },
+    });
+    const session = await sessionStore.create(meRes.json().id);
+    await sessionStore.update(session.id, {
+      cards: [
+        {
+          id: 'cost-1',
+          type: 'cost',
+          status: 'draft',
+          content: { scales: [] },
+        },
+      ],
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${session.id}/cards/cost/lock`,
+      headers: { cookie: authCookie },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ ok: true, card: { status: 'locked' } });
+  });
+});

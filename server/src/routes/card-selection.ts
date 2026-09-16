@@ -5,6 +5,7 @@ import { type AuthStore } from '../auth/auth-store.js';
 import { type SessionStore } from '../session-store.js';
 import { createRenderBuildOptionsTool } from '../render-build-options-tool.js';
 import { createRenderArchitectureTool } from '../render-architecture-tool.js';
+import { createRenderCostTableTool } from '../render-cost-table-tool.js';
 
 const selectSchema = z.object({
   index: z.number().int(),
@@ -75,6 +76,36 @@ export function registerCardSelectionRoutes(
         onEvent: () => {},
       });
       const result = await tool.lock_architecture({});
+
+      if (!result.ok) {
+        return reply.status(400).send(result);
+      }
+
+      return reply.status(200).send(result);
+    },
+  );
+
+  /**
+   * Direct cost-table-lock route (Epic 3.4): mirrors the architecture-lock
+   * route above — lets the user confirm the cost table directly from the
+   * canvas card, using the same lock_cost_table logic the agent's tool
+   * call uses.
+   */
+  app.post<{ Params: { id: string } }>(
+    '/api/sessions/:id/cards/cost/lock',
+    { preHandler: auth },
+    async (request, reply) => {
+      const session = await sessionStore.get(request.params.id);
+      if (!session || session.userId !== request.userId) {
+        return reply.status(404).send({ error: 'session_not_found' });
+      }
+
+      const tool = createRenderCostTableTool({
+        store: sessionStore,
+        sessionId: request.params.id,
+        onEvent: () => {},
+      });
+      const result = await tool.lock_cost_table({});
 
       if (!result.ok) {
         return reply.status(400).send(result);

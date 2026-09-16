@@ -55,6 +55,7 @@ import {
   createCuratedPricingClient,
   type PricingClient,
 } from './pricing-catalog.js';
+import { createGetPricingTiersTool } from './get-pricing-tiers-tool.js';
 import {
   createDbManifestStore,
   createInMemoryManifestStore,
@@ -324,6 +325,7 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
   const pricingClient = deps.pricingClient ?? createCuratedPricingClient();
   const pricingCatalog = createPricingCatalog({ client: pricingClient });
   app.decorate('pricingCatalog', pricingCatalog);
+  const getPricingTiersTool = createGetPricingTiersTool({ catalog: pricingCatalog });
 
   // Build manifest persistence (Epic 2.5/2.6). Same DB-backed-else-in-memory
   // convention as every other store above.
@@ -342,7 +344,10 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
       manifestStore,
       costGuard,
       anthropicClient: orchestratorAnthropicClient,
-      extraTools: { web_search: webSearchTool.web_search },
+      extraTools: {
+        web_search: webSearchTool.web_search,
+        get_pricing_tiers: getPricingTiersTool.get_pricing_tiers,
+      },
       analyticsLogger,
     });
     registerAgentRoutes(app, authStore, sessionStore, orchestrator);
