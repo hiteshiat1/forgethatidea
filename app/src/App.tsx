@@ -32,6 +32,8 @@ import {
   lockArchitecture,
   lockCostTable,
   selectMarketingPlan,
+  getGateStatus,
+  confirmBuild,
   type AuthUser,
   type ApiSession,
   type ApiSessionCard,
@@ -44,6 +46,7 @@ import { BuildOptionsCard } from './components/BuildOptionsCard.js';
 import { ArchitectureCard } from './components/ArchitectureCard.js';
 import { CostTableCard } from './components/CostTableCard.js';
 import { MarketingPlansCard } from './components/MarketingPlansCard.js';
+import { ConfirmBuildGate } from './components/ConfirmBuildGate.js';
 
 type Health = { status: string; env: string } | null;
 
@@ -382,6 +385,9 @@ export function App() {
   const [lockingArchitecture, setLockingArchitecture] = useState(false);
   const [lockingCostTable, setLockingCostTable] = useState(false);
   const [selectingMarketingPlan, setSelectingMarketingPlan] = useState(false);
+  const [gateMissing, setGateMissing] = useState<string[] | null>(null);
+  const [confirmingBuild, setConfirmingBuild] = useState(false);
+  const [confirmBuildError, setConfirmBuildError] = useState<string | null>(null);
 
   // Seed turnState.phase from the real session once it becomes available,
   // then let handleTurnEvents (below, driven by real message responses) own
@@ -424,6 +430,19 @@ export function App() {
       setSessions([]);
     }
   }, [activeSessionIdForSeeding, sessionState.status]);
+
+  // Confirm-build gate (Epic 3.7): refetches whenever a card lock/select
+  // changes `cards`, so the checklist and button state never go stale after
+  // e.g. clicking "Confirm build" straight off a click-to-lock action.
+  useEffect(() => {
+    if (sessionState.status === 'ready' && phase === 'planning') {
+      getGateStatus(sessionState.session.id).then((status) => {
+        setGateMissing(status.next === 'build' ? status.missing : []);
+      });
+    } else {
+      setGateMissing(null);
+    }
+  }, [sessionState.status, activeSessionIdForSeeding, phase, cards]);
 
   /**
    * Applies a turn's ordered events (Epic 2.12) — phase transitions and card
@@ -534,6 +553,23 @@ export function App() {
     }
   }
 
+  async function handleConfirmBuild() {
+    if (sessionState.status !== 'ready') return;
+    setConfirmingBuild(true);
+    setConfirmBuildError(null);
+    const result = await confirmBuild(sessionState.session.id);
+    setConfirmingBuild(false);
+    if (result.ok) {
+      handleTurnEvents([{ type: 'phase_changed', from: phase, to: 'build' }]);
+    } else {
+      setConfirmBuildError(
+        result.error === 'phase_gate_not_satisfied'
+          ? "Not all planning cards are locked yet — that shouldn't happen from this button, please refresh."
+          : "Couldn't confirm the build — try again.",
+      );
+    }
+  }
+
   if (sessionState.status === 'checking') {
     return null;
   }
@@ -634,6 +670,14 @@ export function App() {
               }
               return null;
             })}
+            {gateMissing !== null && (
+              <ConfirmBuildGate
+                missing={gateMissing}
+                onConfirm={handleConfirmBuild}
+                confirming={confirmingBuild}
+                error={confirmBuildError}
+              />
+            )}
           </CanvasPane>
         ) : (
           <Onboarding

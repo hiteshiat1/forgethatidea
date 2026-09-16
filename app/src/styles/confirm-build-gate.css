@@ -1,0 +1,41 @@
+/* Confirm-build gate (Epic 3.7). */
+
+.confirm-build-gate__checklist {
+  list-style: none;
+  margin: 0 0 var(--forge-space-3);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--forge-space-2);
+}
+
+.confirm-build-gate__item {
+  display: flex;
+  align-items: center;
+  gap: var(--forge-space-2);
+  font-size: 0.9375rem;
+  color: var(--forge-slate-400);
+}
+
+.confirm-build-gate__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--forge-slate-400);
+  font-size: 0.75rem;
+}
+
+.confirm-build-gate__icon--done {
+  border-color: var(--forge-success);
+  background: var(--forge-success);
+  color: var(--forge-ink-900);
+}
+
+.confirm-build-gate__error {
+  color: var(--forge-danger);
+  font-size: 0.875rem;
+  margin: 0 0 var(--forge-space-2);
+}

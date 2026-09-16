@@ -441,3 +441,39 @@ export async function selectMarketingPlan(
   });
   return res.json();
 }
+
+export interface GateStatus {
+  next: Phase | null;
+  passed: boolean;
+  missing: string[];
+}
+
+/** Reads whether the session's next phase transition is gated, and by what (Epic 2.2/#50's confirm-build gate). */
+export async function getGateStatus(sessionId: string): Promise<GateStatus> {
+  const res = await fetch(`/api/sessions/${sessionId}/gate`, { credentials: 'include' });
+  return res.json();
+}
+
+export type ConfirmBuildResponse =
+  | { ok: true; session: ApiSession }
+  | { ok: false; error: string; missing?: string[] };
+
+/**
+ * Confirms the plan and transitions the session into the build phase
+ * (Epic 3.7) — the existing PATCH /api/sessions/:id route already enforces
+ * the same gate (phase-gates.ts) server-side and freezes the manifest
+ * (manifest-freeze.ts) on a successful transition into 'build'.
+ */
+export async function confirmBuild(sessionId: string): Promise<ConfirmBuildResponse> {
+  const res = await fetch(`/api/sessions/${sessionId}`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phase: 'build' }),
+  });
+  const body = await res.json();
+  if (!res.ok) {
+    return { ok: false, error: body.error, missing: body.missing };
+  }
+  return { ok: true, session: body };
+}
