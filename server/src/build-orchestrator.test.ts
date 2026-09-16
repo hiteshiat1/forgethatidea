@@ -243,4 +243,103 @@ describe('createBuildOrchestrator (#75)', () => {
       expect(result.code).toBe(VALID_CODE);
     }
   });
+
+  it('logs a build_succeeded event with the archetype and repair round count (#83)', async () => {
+    const deps = await buildDeps(clientReturning(VALID_CODE));
+    const session = await deps.sessionStore.create('user-1');
+    await deps.manifestStore.save(session.id, manifest());
+    await deps.sessionStore.update(session.id, { frozenManifestVersion: 1, phase: 'build' });
+    const analyticsLogger = { info: vi.fn() };
+    const orchestrator = createBuildOrchestrator({ ...deps, analyticsLogger });
+
+    await orchestrator.handleBuild(session.id, 'user-1');
+
+    expect(analyticsLogger.info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        analytics_event: true,
+        type: 'build_succeeded',
+        sessionId: session.id,
+        archetype: 'crud-tracker',
+        repairRounds: 0,
+      }),
+      'analytics.build_succeeded',
+    );
+  });
+
+  it('logs a build_failed event with cause/repairRounds when generation/validation fails (#83)', async () => {
+    const deps = await buildDeps(
+      clientReturning('localStorage.setItem("x","1"); function App(){}'),
+    );
+    const session = await deps.sessionStore.create('user-1');
+    await deps.manifestStore.save(session.id, manifest());
+    await deps.sessionStore.update(session.id, { frozenManifestVersion: 1, phase: 'build' });
+    const analyticsLogger = { info: vi.fn() };
+    const orchestrator = createBuildOrchestrator({ ...deps, maxRepairRounds: 0, analyticsLogger });
+
+    await orchestrator.handleBuild(session.id, 'user-1');
+
+    expect(analyticsLogger.info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        analytics_event: true,
+        type: 'build_failed',
+        sessionId: session.id,
+        archetype: 'crud-tracker',
+        cause: 'validation_failed_after_repairs',
+        repairRounds: 0,
+      }),
+      'analytics.build_failed',
+    );
+  });
+
+  it('logs a build_failed event with cause spec_compile_failed and archetype unknown when the manifest cannot compile into a spec (#83)', async () => {
+    const deps = await buildDeps(clientReturning(VALID_CODE));
+    const session = await deps.sessionStore.create('user-1');
+    // No entities — compileGenerationSpec rejects this before any archetype
+    // is ever determined.
+    await deps.manifestStore.save(session.id, { ...manifest(), entities: [] });
+    await deps.sessionStore.update(session.id, { frozenManifestVersion: 1, phase: 'build' });
+    const analyticsLogger = { info: vi.fn() };
+    const orchestrator = createBuildOrchestrator({ ...deps, analyticsLogger });
+
+    await orchestrator.handleBuild(session.id, 'user-1');
+
+    expect(analyticsLogger.info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        analytics_event: true,
+        type: 'build_failed',
+        sessionId: session.id,
+        archetype: 'unknown',
+        cause: 'spec_compile_failed',
+        repairRounds: 0,
+      }),
+      'analytics.build_failed',
+    );
+  });
+
+  it('logs a build_failed event with cause content_blocked when screening disallows (#83)', async () => {
+    const client = clientWithScreening(
+      JSON.stringify({ allowed: false, reason: 'Requests a scam-facilitation tool.' }),
+      VALID_CODE,
+    );
+    const deps = await buildDeps(client);
+    const session = await deps.sessionStore.create('user-1');
+    await deps.manifestStore.save(session.id, manifest());
+    await deps.sessionStore.update(session.id, { frozenManifestVersion: 1, phase: 'build' });
+    const analyticsLogger = { info: vi.fn() };
+    const orchestrator = createBuildOrchestrator({ ...deps, analyticsLogger });
+
+    await orchestrator.handleBuild(session.id, 'user-1');
+
+    expect(analyticsLogger.info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        analytics_event: true,
+        type: 'build_failed',
+        sessionId: session.id,
+        archetype: 'crud-tracker',
+        cause: 'content_blocked',
+        repairRounds: 0,
+      }),
+      'analytics.build_failed',
+    );
+  });
 });

@@ -150,3 +150,63 @@ export async function queryRefinementFunnel(
         : 0,
   };
 }
+
+export interface BuildFailureReport {
+  /** Failure counts keyed by archetype (Epic 4.22's "rates by archetype") — 'unknown' when the archetype was never determined (spec_compile_failed). */
+  failuresByArchetype: Record<string, number>;
+  /** Failure counts keyed by cause — "common validation errors" per the issue, at the granularity the typed BuildFailedEvent causes already carry. */
+  failuresByCause: Record<string, number>;
+  /** Successful builds that needed zero repair rounds, over all successful builds — "repair-loop success rate". */
+  cleanFirstTryRate: number;
+  /** Overall build_failed events over all build attempts (succeeded + failed) — the top-line quality number for a "weekly quality report". */
+  failureRate: number;
+  totalSucceeded: number;
+  totalFailed: number;
+}
+
+/**
+ * Computes build-failure/quality metrics (Epic 4.22) directly from the
+ * durable event log, mirroring queryRefinementFunnel's shape — the
+ * queryable surface for a script, test, or future admin route, rather than
+ * a separate dashboard service. Every build attempt emits exactly one of
+ * build_succeeded/build_failed (build-orchestrator.ts), so counting each
+ * event type once gives an exact attempt count with no double-counting or
+ * inference needed.
+ */
+export async function queryBuildFailureReport(store: AnalyticsStore): Promise<BuildFailureReport> {
+  const events = await store.listAll();
+
+  const failuresByArchetype: Record<string, number> = {};
+  const failuresByCause: Record<string, number> = {};
+  let totalSucceeded = 0;
+  let totalFailed = 0;
+  let cleanFirstTrySucceeded = 0;
+
+  for (const event of events) {
+    if (event.type === 'build_failed') {
+      totalFailed++;
+      const archetype = event.payload.archetype as string;
+      const cause = event.payload.cause as string;
+      failuresByArchetype[archetype] = (failuresByArchetype[archetype] ?? 0) + 1;
+      failuresByCause[cause] = (failuresByCause[cause] ?? 0) + 1;
+    }
+
+    if (event.type === 'build_succeeded') {
+      totalSucceeded++;
+      if (event.payload.repairRounds === 0) {
+        cleanFirstTrySucceeded++;
+      }
+    }
+  }
+
+  const totalAttempts = totalSucceeded + totalFailed;
+
+  return {
+    failuresByArchetype,
+    failuresByCause,
+    cleanFirstTryRate: totalSucceeded > 0 ? cleanFirstTrySucceeded / totalSucceeded : 0,
+    failureRate: totalAttempts > 0 ? totalFailed / totalAttempts : 0,
+    totalSucceeded,
+    totalFailed,
+  };
+}
