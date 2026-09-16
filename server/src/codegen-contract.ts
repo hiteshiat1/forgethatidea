@@ -3,6 +3,7 @@ import type { ArchetypeDefinition } from './archetype-catalog.js';
 import { buildMockAuthPattern } from './mock-auth-pattern.js';
 import { buildMockCrudStorePattern } from './mock-crud-store-pattern.js';
 import { buildBrandingInjectionPattern } from './branding-injection.js';
+import { buildNavPattern } from './nav-pattern.js';
 
 /**
  * Generator prompt & output contract (Epic 4.2). Two halves of the same
@@ -15,7 +16,7 @@ import { buildBrandingInjectionPattern } from './branding-injection.js';
  * whenever either half changes in a way that could affect generated output,
  * matching the SYSTEM_PROMPT_VERSION convention in system-prompt.ts.
  */
-export const CODEGEN_CONTRACT_VERSION = '2026-09-07.4';
+export const CODEGEN_CONTRACT_VERSION = '2026-09-16.5';
 
 export interface CodegenPromptInput {
   manifest: BuildManifest;
@@ -65,6 +66,8 @@ ${buildBrandingInjectionPattern(manifest.productName, manifest.branding)}
 ${buildMockAuthPattern(manifest.roles)}
 
 ${buildMockCrudStorePattern(manifest.entities)}
+
+${buildNavPattern(manifest.screens)}
 
 Out of scope for this archetype in v1 — do not attempt:
 ${archetype.outOfScope.map((item) => `- ${item}`).join('\n')}
