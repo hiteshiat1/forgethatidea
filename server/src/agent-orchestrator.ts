@@ -12,6 +12,7 @@ import { createPhaseTransitionTool } from './phase-transition-tool.js';
 import { createManifestSummaryTool } from './manifest-summary-tool.js';
 import { createRenderBuildOptionsTool } from './render-build-options-tool.js';
 import { createRenderArchitectureTool } from './render-architecture-tool.js';
+import { createRenderCostTableTool } from './render-cost-table-tool.js';
 import { compactChatHistory } from './conversation-compaction.js';
 import { emitAnalyticsEvent, type AnalyticsLogger } from './analytics.js';
 import type { TurnEvent } from './turn-events.js';
@@ -234,6 +235,58 @@ const BUILT_IN_TOOL_SCHEMAS = {
     description: 'Lock in the current architecture once the user is happy with it.',
     inputSchema: { type: 'object', properties: {} },
   },
+  render_cost_table: {
+    description:
+      'Present line-item monthly cost estimates as a table, at one or more usage scales (e.g. "100 users" and "1,000 users") so the user can see how costs grow. Every line item MUST have a real assumption and a real sourceUrl — call get_pricing_tiers first to ground these in actual published pricing rather than inventing numbers. Never fabricate a price or a source; this is a hard non-negotiable honesty rule. Calling this again replaces the previous cost table rather than adding to it.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        scales: {
+          type: 'array',
+          minItems: 1,
+          items: {
+            type: 'object',
+            properties: {
+              label: { type: 'string' },
+              lineItems: {
+                type: 'array',
+                minItems: 1,
+                items: {
+                  type: 'object',
+                  properties: {
+                    name: { type: 'string' },
+                    monthlyCostCents: { type: 'number' },
+                    assumption: { type: 'string' },
+                    sourceUrl: { type: 'string' },
+                  },
+                  required: ['name', 'monthlyCostCents', 'assumption', 'sourceUrl'],
+                },
+              },
+            },
+            required: ['label', 'lineItems'],
+          },
+        },
+      },
+      required: ['scales'],
+    },
+  },
+  lock_cost_table: {
+    description: 'Lock in the current cost table once the user is happy with it.',
+    inputSchema: { type: 'object', properties: {} },
+  },
+  get_pricing_tiers: {
+    description:
+      'Look up real, published pricing tiers (hosting, database, ai, domain, or email) to ground render_cost_table line items in actual sourced figures instead of invented ones. Omit category to get every tier.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        category: {
+          type: 'string',
+          enum: ['hosting', 'database', 'ai', 'domain', 'email'],
+        },
+      },
+    },
+  },
 } as const;
 
 function toAnthropicMessages(chat: ChatMessage[]): AnthropicMessageParam[] {
@@ -319,6 +372,11 @@ export function createAgentOrchestrator(deps: AgentOrchestratorDeps) {
       sessionId,
       onEvent: (event) => events.push(event),
     });
+    const costTableTool = createRenderCostTableTool({
+      store: sessionStore,
+      sessionId,
+      onEvent: (event) => events.push(event),
+    });
     const toolRegistry: ToolRegistry = {
       get_manifest: manifestTools.get_manifest,
       update_manifest: manifestTools.update_manifest,
@@ -330,6 +388,8 @@ export function createAgentOrchestrator(deps: AgentOrchestratorDeps) {
       select_build_option: buildOptionsTool.select_build_option,
       render_architecture: architectureTool.render_architecture,
       lock_architecture: architectureTool.lock_architecture,
+      render_cost_table: costTableTool.render_cost_table,
+      lock_cost_table: costTableTool.lock_cost_table,
       ...deps.extraTools,
     };
     const dispatcher = createToolDispatcher({ tools: toolRegistry, logger: silentLogger() });

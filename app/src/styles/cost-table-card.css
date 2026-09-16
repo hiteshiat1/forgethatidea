@@ -1,0 +1,61 @@
+/* Cost table card (Epic 3.4). */
+
+.cost-table-card__scale-toggle {
+  display: flex;
+  gap: var(--forge-space-2);
+  margin-bottom: var(--forge-space-3);
+}
+
+.cost-table-card__scale-tab {
+  padding: 4px 12px;
+  border-radius: var(--forge-radius-pill);
+  border: 1px solid var(--forge-ink-500);
+  background: var(--forge-ink-800);
+  color: var(--forge-slate-300);
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.cost-table-card__scale-tab--active {
+  border-color: var(--forge-signal-amber);
+  background: var(--forge-ink-700);
+  color: var(--forge-slate-100);
+  font-weight: 600;
+}
+
+.cost-table-card__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  margin-bottom: var(--forge-space-3);
+}
+
+.cost-table-card__table th {
+  text-align: left;
+  padding: 4px 8px;
+  color: var(--forge-slate-400);
+  font-weight: 500;
+  border-bottom: 1px solid var(--forge-ink-500);
+}
+
+.cost-table-card__table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--forge-ink-600);
+  vertical-align: top;
+}
+
+.cost-table-card__assumption {
+  color: var(--forge-slate-300);
+  font-size: 0.8125rem;
+}
+
+.cost-table-card__assumption a {
+  color: var(--forge-signal-amber);
+  white-space: nowrap;
+}
+
+.cost-table-card__table tfoot td {
+  border-bottom: none;
+  font-weight: 600;
+  padding-top: var(--forge-space-2);
+}

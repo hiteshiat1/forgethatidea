@@ -30,14 +30,17 @@ import {
   revertAppVersion,
   selectBuildOption,
   lockArchitecture,
+  lockCostTable,
   type AuthUser,
   type ApiSession,
   type ApiSessionCard,
   type BuildOptionsCardContent,
   type ArchitectureCardContent,
+  type CostTableCardContent,
 } from './api.js';
 import { BuildOptionsCard } from './components/BuildOptionsCard.js';
 import { ArchitectureCard } from './components/ArchitectureCard.js';
+import { CostTableCard } from './components/CostTableCard.js';
 
 type Health = { status: string; env: string } | null;
 
@@ -374,6 +377,7 @@ export function App() {
   const [cards, setCards] = useState<ApiSessionCard[]>([]);
   const [selectingOption, setSelectingOption] = useState(false);
   const [lockingArchitecture, setLockingArchitecture] = useState(false);
+  const [lockingCostTable, setLockingCostTable] = useState(false);
 
   // Seed turnState.phase from the real session once it becomes available,
   // then let handleTurnEvents (below, driven by real message responses) own
@@ -506,6 +510,16 @@ export function App() {
     }
   }
 
+  async function handleLockCostTable() {
+    if (sessionState.status !== 'ready') return;
+    setLockingCostTable(true);
+    const result = await lockCostTable(sessionState.session.id);
+    setLockingCostTable(false);
+    if (result.ok) {
+      setCards((prev) => prev.map((c) => (c.type === 'cost' ? result.card : c)));
+    }
+  }
+
   if (sessionState.status === 'checking') {
     return null;
   }
@@ -577,6 +591,18 @@ export function App() {
                     content={card.content as ArchitectureCardContent}
                     onLock={handleLockArchitecture}
                     locking={lockingArchitecture}
+                  />
+                );
+              }
+              if (card.type === 'cost') {
+                return (
+                  <CostTableCard
+                    key={card.id}
+                    index={i + 1}
+                    status={card.status}
+                    content={card.content as CostTableCardContent}
+                    onLock={handleLockCostTable}
+                    locking={lockingCostTable}
                   />
                 );
               }
