@@ -37,7 +37,10 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild"
-    ]
+    ],
+    "overrides": {
+      "html-encoding-sniffer": "5.0.0"
+    }
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx}": [
