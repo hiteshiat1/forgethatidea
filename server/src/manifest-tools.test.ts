@@ -36,6 +36,34 @@ describe('get_manifest', () => {
 });
 
 describe('update_manifest', () => {
+  it('rejects a call missing the required patch field with a diagnostic detail, not a bare code', async () => {
+    // Regression coverage for a real production bug: the model repeatedly
+    // called update_manifest with an empty object ({}), no `patch` key at
+    // all — a genuine malformed tool call, not a manifest-shape problem.
+    // The old `invalid_input` branch returned no `details` at all (unlike
+    // every other rejection branch), so the model had nothing to learn
+    // from and just kept repeating the same broken call turn after turn.
+    const store = createInMemoryManifestStore();
+    const tools = createManifestTools({ store, sessionId: 'session-1' });
+
+    const result = await tools.update_manifest({});
+    expect(result).toMatchObject({ ok: false, error: 'invalid_input' });
+    if (!result.ok && result.error === 'invalid_input') {
+      expect(result.details.join(' ')).toMatch(/patch/i);
+    }
+  });
+
+  it('rejects a call whose patch field is not an object with a diagnostic detail', async () => {
+    const store = createInMemoryManifestStore();
+    const tools = createManifestTools({ store, sessionId: 'session-1' });
+
+    const result = await tools.update_manifest({ patch: 'not an object' });
+    expect(result).toMatchObject({ ok: false, error: 'invalid_input' });
+    if (!result.ok && result.error === 'invalid_input') {
+      expect(result.details.join(' ')).toMatch(/patch/i);
+    }
+  });
+
   it('creates the manifest from a full payload when none exists yet', async () => {
     const store = createInMemoryManifestStore();
     const tools = createManifestTools({ store, sessionId: 'session-1' });
