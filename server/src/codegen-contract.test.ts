@@ -134,6 +134,15 @@ describe('buildCodegenPrompt (#63)', () => {
     expect(prompt.toLowerCase()).toContain('error boundary');
   });
 
+  it('embeds the standardized "what\'s mocked" transparency panel pattern (#82)', () => {
+    const prompt = buildCodegenPrompt({
+      manifest: manifest(),
+      archetype: ARCHETYPES['crud-tracker'],
+    });
+    expect(prompt.toLowerCase()).toContain("what's mocked");
+    expect(prompt.toLowerCase()).toContain('plain language');
+  });
+
   it('requires seed data realistic and relevant to the ICP', () => {
     const prompt = buildCodegenPrompt({
       manifest: manifest(),
