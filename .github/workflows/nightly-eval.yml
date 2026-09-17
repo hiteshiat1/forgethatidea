@@ -27,6 +27,13 @@ jobs:
       # unset, matching this codebase's "boot without a key" convention.
       # Add the secret in repo settings once real generation quality
       # tracking is needed; until then this job is a documented no-op.
+      #
+      # Each fixture that generates successfully is also headlessly
+      # rendered and clicked through (#84, server/src/eval/headless-render-check.ts)
+      # as part of runEval — this is the only place in CI that check runs,
+      # since it needs real generation output and this is the only job with
+      # a live ANTHROPIC_API_KEY. It is intentionally not a PR-blocking
+      # check: see headless-render-check.ts's module doc for why.
       - name: Run generation quality eval
         working-directory: server
         env:

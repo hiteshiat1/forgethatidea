@@ -3,9 +3,11 @@ import { runEval, isRegression } from './run-eval.js';
 import type { BuildManifest } from '@forge/shared';
 
 // Includes a minimal real error boundary (componentDidCatch) — required by
-// the missing_error_boundary contract rule (#80) for code to count as valid.
+// the missing_error_boundary contract rule (#80) for code to count as
+// valid — and renders real content (not null), so it also passes the
+// headless render check (#84), which flags a blank render as a failure.
 const VALID_CODE =
-  'class B extends React.Component { componentDidCatch(e) {} render() { return this.props.children; } } export default function App() { return null; }';
+  'class B extends React.Component { componentDidCatch(e) {} render() { return this.props.children; } } export default function App() { return React.createElement("div", null, "Hello"); }';
 const INVALID_CODE = 'localStorage.setItem("x", "1"); function App() { return null; }';
 
 function fixture(overrides: Partial<BuildManifest> = {}): BuildManifest {
@@ -90,6 +92,31 @@ describe('runEval (#77)', () => {
     });
 
     expect(report.results[0]?.archetype).toBe('crud-tracker');
+  });
+
+  it('fails a fixture whose generated app renders blank, even though it compiled and passed the static contract (#84)', async () => {
+    const BLANK_BUT_VALID_CODE =
+      'class B extends React.Component { componentDidCatch(e) {} render() { return this.props.children; } } export default function App() { return null; }';
+    const client = clientReturning(BLANK_BUT_VALID_CODE);
+    const report = await runEval({
+      fixtures: [fixture()],
+      anthropicClient: client,
+      maxRepairRounds: 0,
+    });
+
+    expect(report.results[0]?.passed).toBe(false);
+    expect(report.results[0]?.failureReason).toContain('blank_render');
+  });
+
+  it('passes a fixture that compiles, passes the static contract, and headlessly renders real content (#84)', async () => {
+    const client = clientReturning(VALID_CODE);
+    const report = await runEval({
+      fixtures: [fixture()],
+      anthropicClient: client,
+      maxRepairRounds: 0,
+    });
+
+    expect(report.results[0]?.passed).toBe(true);
   });
 });
 

@@ -2,6 +2,7 @@ import type { Archetype, BuildManifest } from '@forge/shared';
 import { compileGenerationSpec, isCompileSpecFailure } from '../generation-spec.js';
 import { runAutoRepairLoop, isAutoRepairFailure } from '../auto-repair-loop.js';
 import type { GenerationAnthropicClient } from '../generation-pipeline.js';
+import { runHeadlessRenderCheck, isHeadlessRenderFailure } from './headless-render-check.js';
 
 export interface EvalFixtureResult {
   productName: string;
@@ -29,12 +30,14 @@ export interface RunEvalInput {
 
 /**
  * Generation quality eval harness (Epic 4.16): runs every fixture manifest
- * through the real pipeline — spec compile (#64) then generation with
- * auto-repair (#67, internally #65 generation + #66 validation) — and
- * scores compile rate and contract compliance directly (a fixture only
- * "passes" once it produces validation-clean code); archetype fit is
- * reported per-result so a regression specific to one archetype is visible
- * rather than only an aggregate number.
+ * through the real pipeline — spec compile (#64), generation with
+ * auto-repair (#67, internally #65 generation + #66 validation), then a
+ * headless render + click-through check (#84, headless-render-check.ts) —
+ * and scores end-to-end quality directly (a fixture only "passes" once it
+ * compiles, passes the static contract, AND actually mounts to real content
+ * without crashing when clicked through); archetype fit is reported
+ * per-result so a regression specific to one archetype is visible rather
+ * than only an aggregate number.
  */
 export async function runEval(input: RunEvalInput): Promise<EvalReport> {
   const { fixtures, anthropicClient } = input;
@@ -66,6 +69,20 @@ export async function runEval(input: RunEvalInput): Promise<EvalReport> {
         archetype: specResult.spec.archetype,
         passed: false,
         failureReason: repairResult.error,
+        repairRounds: repairResult.repairRounds,
+      });
+      continue;
+    }
+
+    const renderResult = await runHeadlessRenderCheck({
+      compiledCode: repairResult.compiledCode,
+    });
+    if (isHeadlessRenderFailure(renderResult)) {
+      results.push({
+        productName: manifest.productName,
+        archetype: specResult.spec.archetype,
+        passed: false,
+        failureReason: `${renderResult.error}${renderResult.detail ? `: ${renderResult.detail}` : ''}`,
         repairRounds: repairResult.repairRounds,
       });
       continue;
