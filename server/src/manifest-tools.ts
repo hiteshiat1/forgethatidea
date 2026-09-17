@@ -15,20 +15,34 @@ export type UpdateManifestResult =
   | { ok: true; manifest: BuildManifest; version: number }
   | { ok: false; error: 'no_manifest_to_merge_into'; details: string[] }
   | { ok: false; error: 'validation_failed'; details: string[] }
-  | { ok: false; error: 'invalid_input' };
+  | { ok: false; error: 'invalid_input'; details: string[] };
 
 interface UpdateManifestInput {
   patch: Partial<BuildManifest>;
 }
 
-function isUpdateManifestInput(input: unknown): input is UpdateManifestInput {
-  return (
-    typeof input === 'object' &&
-    input !== null &&
-    'patch' in input &&
-    typeof (input as { patch: unknown }).patch === 'object' &&
-    (input as { patch: unknown }).patch !== null
-  );
+/**
+ * Checks the call shape itself (not the manifest content — validateManifest
+ * covers that) and returns the specific reason it's malformed, or null when
+ * it's fine. A real production bug traced back to the model repeatedly
+ * calling update_manifest with `{}` (no `patch` key at all): the old check
+ * only returned a bare `invalid_input` code with no detail, so the model
+ * had nothing to correct course with and kept repeating the same broken
+ * call every turn. Every other rejection branch in this function reports
+ * specific `details`; this one now does too.
+ */
+function describeInputShapeProblem(input: unknown): string | null {
+  if (typeof input !== 'object' || input === null) {
+    return 'Input must be an object of the form { patch: {...} }.';
+  }
+  if (!('patch' in input)) {
+    return 'Missing required field "patch" — call update_manifest with { patch: {...} }, never with an empty object.';
+  }
+  const patch = (input as { patch: unknown }).patch;
+  if (typeof patch !== 'object' || patch === null || Array.isArray(patch)) {
+    return '"patch" must be an object of manifest fields to set, not a string, array, or other value.';
+  }
+  return null;
 }
 
 /**
@@ -78,10 +92,11 @@ export function createManifestTools(deps: ManifestToolsDeps) {
    * with audit".
    */
   async function update_manifest(rawInput: unknown): Promise<UpdateManifestResult> {
-    if (!isUpdateManifestInput(rawInput)) {
-      return { ok: false, error: 'invalid_input' };
+    const shapeProblem = describeInputShapeProblem(rawInput);
+    if (shapeProblem) {
+      return { ok: false, error: 'invalid_input', details: [shapeProblem] };
     }
-    const input = rawInput;
+    const input = rawInput as UpdateManifestInput;
     const latest = await store.getLatest(sessionId);
 
     let merged: unknown;
