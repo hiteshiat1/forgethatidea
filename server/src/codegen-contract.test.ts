@@ -110,6 +110,21 @@ describe('buildCodegenPrompt (#63)', () => {
     expect(prompt.toLowerCase()).toContain('usereducer');
   });
 
+  it('embeds the standardized navigation pattern for a multi-screen manifest (#79)', () => {
+    const withScreens = manifest({
+      screens: [
+        { name: 'Habit list', purpose: 'see all habits' },
+        { name: 'Settings', purpose: 'manage preferences' },
+      ],
+    });
+    const prompt = buildCodegenPrompt({
+      manifest: withScreens,
+      archetype: ARCHETYPES['crud-tracker'],
+    });
+    expect(prompt.toLowerCase()).toContain('navigation pattern');
+    expect(prompt.toLowerCase()).toContain('nav bar');
+  });
+
   it('requires seed data realistic and relevant to the ICP', () => {
     const prompt = buildCodegenPrompt({
       manifest: manifest(),
