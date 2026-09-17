@@ -82,6 +82,62 @@ describe('createToolDispatcher', () => {
     expect(logger.error).toHaveBeenCalled();
   });
 
+  it('logs a warning when a tool resolves normally but its own result reports failure (ok: false)', async () => {
+    const logger = silentLogger();
+    const rejecting: ToolHandler = vi.fn(async () => ({
+      ok: false,
+      error: 'no_manifest_to_merge_into',
+      details: ['icp: Required'],
+    }));
+    const dispatcher = createToolDispatcher({ tools: { rejecting }, logger });
+
+    const result = await dispatcher.dispatch({
+      type: 'tool_use',
+      id: 'call-6',
+      name: 'rejecting',
+      input: { patch: { productName: 'HabitLoop' } },
+    });
+
+    // The tool result itself is still returned to the model as normal (a
+    // domain-level rejection is not a dispatch error) — but it must be
+    // observable in logs, since this exact "resolves fine, silently
+    // rejects" shape is what made a real production bug (manifest writes
+    // being rejected with no diagnostic trail) invisible in logs before.
+    expect(result.isError).toBe(false);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolUseId: 'call-6',
+        tool: 'rejecting',
+        input: { patch: { productName: 'HabitLoop' } },
+        result: { ok: false, error: 'no_manifest_to_merge_into', details: ['icp: Required'] },
+      }),
+      'tool call resolved with a domain-level failure',
+    );
+  });
+
+  it('logs every successful tool dispatch at info level, including its input and result', async () => {
+    const logger = silentLogger();
+    const getWeather: ToolHandler = vi.fn(async () => ({ ok: true, weather: 'sunny' }));
+    const dispatcher = createToolDispatcher({ tools: { get_weather: getWeather }, logger });
+
+    await dispatcher.dispatch({
+      type: 'tool_use',
+      id: 'call-7',
+      name: 'get_weather',
+      input: { city: 'Lisbon' },
+    });
+
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolUseId: 'call-7',
+        tool: 'get_weather',
+        input: { city: 'Lisbon' },
+        result: { ok: true, weather: 'sunny' },
+      }),
+      'tool call dispatched',
+    );
+  });
+
   it('collects tool_use blocks via onToolUse and dispatches each, preserving order', async () => {
     const calls: string[] = [];
     const a: ToolHandler = vi.fn(async () => {

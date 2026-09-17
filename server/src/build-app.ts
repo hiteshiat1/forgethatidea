@@ -349,6 +349,7 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
         get_pricing_tiers: getPricingTiersTool.get_pricing_tiers,
       },
       analyticsLogger,
+      logger: app.log,
     });
     registerAgentRoutes(app, authStore, sessionStore, orchestrator);
   }
