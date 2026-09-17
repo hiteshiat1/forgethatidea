@@ -1,11 +1,24 @@
 import { describe, it, expect, vi } from 'vitest';
 import { buildDiffEditPrompt, runDiffEdit, isDiffEditFailure } from './refinement-diff-edit.js';
 
-const CURRENT_CODE = `export default function App() {
+// Includes a minimal real error boundary (componentDidCatch) — required by
+// the missing_error_boundary contract rule (#80) for code to count as valid,
+// since the revert-to-original path (below) compiles this for preview too.
+const CURRENT_CODE = `class ErrorBoundary extends React.Component {
+  componentDidCatch(error) {}
+  render() { return this.props.children; }
+}
+export default function App() {
   const [habits, setHabits] = React.useState([]);
   return <div>{habits.length}</div>;
 }`;
-const VALID_EDITED_CODE = `export default function App() {
+// Includes a minimal real error boundary (componentDidCatch) — required by
+// the missing_error_boundary contract rule (#80) for code to count as valid.
+const VALID_EDITED_CODE = `class ErrorBoundary extends React.Component {
+  componentDidCatch(error) {}
+  render() { return this.props.children; }
+}
+export default function App() {
   const [habits, setHabits] = React.useState([]);
   return <div>Habits: {habits.length}</div>;
 }`;
