@@ -4,6 +4,7 @@ import { buildMockAuthPattern } from './mock-auth-pattern.js';
 import { buildMockCrudStorePattern } from './mock-crud-store-pattern.js';
 import { buildBrandingInjectionPattern } from './branding-injection.js';
 import { buildNavPattern } from './nav-pattern.js';
+import { buildUiStatesPattern } from './ui-states-pattern.js';
 
 /**
  * Generator prompt & output contract (Epic 4.2). Two halves of the same
@@ -16,7 +17,7 @@ import { buildNavPattern } from './nav-pattern.js';
  * whenever either half changes in a way that could affect generated output,
  * matching the SYSTEM_PROMPT_VERSION convention in system-prompt.ts.
  */
-export const CODEGEN_CONTRACT_VERSION = '2026-09-16.5';
+export const CODEGEN_CONTRACT_VERSION = '2026-09-17.6';
 
 export interface CodegenPromptInput {
   manifest: BuildManifest;
@@ -69,6 +70,8 @@ ${buildMockCrudStorePattern(manifest.entities)}
 
 ${buildNavPattern(manifest.screens)}
 
+${buildUiStatesPattern()}
+
 Out of scope for this archetype in v1 — do not attempt:
 ${archetype.outOfScope.map((item) => `- ${item}`).join('\n')}
 
@@ -81,7 +84,8 @@ export type ContractViolation =
   | 'forbidden_sessionStorage'
   | 'forbidden_fetch'
   | 'forbidden_form_tag'
-  | 'missing_default_export';
+  | 'missing_default_export'
+  | 'missing_error_boundary';
 
 interface ViolationRule {
   code: ContractViolation;
@@ -94,6 +98,14 @@ const RULES: ViolationRule[] = [
   { code: 'forbidden_fetch', test: (code) => /\bfetch\s*\(/.test(code) },
   { code: 'forbidden_form_tag', test: (code) => /<form[\s>]/i.test(code) },
   { code: 'missing_default_export', test: (code) => !/export\s+default\b/.test(code) },
+  // A real error boundary is a class implementing either lifecycle method —
+  // componentDidCatch alone (no getDerivedStateFromError) still works for
+  // logging/fallback purposes, so either is accepted as sufficient evidence
+  // (Epic 4.19's "error boundaries inside generated app").
+  {
+    code: 'missing_error_boundary',
+    test: (code) => !/componentDidCatch|getDerivedStateFromError/.test(code),
+  },
 ];
 
 /**

@@ -5,7 +5,10 @@ import { createInMemoryArtifactStore } from './artifact-store.js';
 import { createRefinementRateLimiter } from './refinement-rate-limiter.js';
 
 const CURRENT_CODE = 'export default function App() { return null; }';
-const EDITED_CODE = 'export default function App() { return <div>Edited</div>; }';
+// Includes a minimal real error boundary (componentDidCatch) — required by
+// the missing_error_boundary contract rule (#80) for code to count as valid.
+const EDITED_CODE =
+  'class B extends React.Component { componentDidCatch(e) {} render() { return this.props.children; } } export default function App() { return <div>Edited</div>; }';
 const SAFE = JSON.stringify({ safe: true });
 const SINGLE_CHANGE = JSON.stringify({ isSingleChange: true });
 

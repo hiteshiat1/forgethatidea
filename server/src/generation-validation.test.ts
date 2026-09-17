@@ -4,6 +4,10 @@ import { validateGeneratedCode } from './generation-validation.js';
 describe('validateGeneratedCode (#66)', () => {
   it('passes clean, compilable, contract-compliant code', async () => {
     const code = `
+      class ErrorBoundary extends React.Component {
+        componentDidCatch(error) {}
+        render() { return this.props.children; }
+      }
       export default function App() {
         const [items, setItems] = useState([]);
         return <div>{items.length}</div>;
@@ -14,7 +18,7 @@ describe('validateGeneratedCode (#66)', () => {
   });
 
   it('returns the esbuild-compiled plain JS on success, so the browser never needs to transpile JSX itself (#eval-csp-fix)', async () => {
-    const code = `export default function App() { return <div>hi</div>; }`;
+    const code = `class B extends React.Component { componentDidCatch(e) {} render() { return this.props.children; } } export default function App() { return <div>hi</div>; }`;
     const result = await validateGeneratedCode(code);
     expect(result.ok).toBe(true);
     if (result.ok) {

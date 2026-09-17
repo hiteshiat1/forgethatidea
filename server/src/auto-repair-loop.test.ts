@@ -16,7 +16,10 @@ function spec(): GenerationSpec {
   };
 }
 
-const VALID_CODE = 'export default function App() { return null; }';
+// Includes a minimal real error boundary (componentDidCatch) — required by
+// the missing_error_boundary contract rule (#80) for code to count as valid.
+const VALID_CODE =
+  'class B extends React.Component { componentDidCatch(e) {} render() { return this.props.children; } } export default function App() { return null; }';
 const INVALID_CODE = 'localStorage.setItem("x", "1"); function App() { return null; }';
 
 function clientReturning(...codes: string[]) {

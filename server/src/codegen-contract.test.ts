@@ -125,6 +125,15 @@ describe('buildCodegenPrompt (#63)', () => {
     expect(prompt.toLowerCase()).toContain('nav bar');
   });
 
+  it('embeds the standardized empty/error/loading states pattern (#80)', () => {
+    const prompt = buildCodegenPrompt({
+      manifest: manifest(),
+      archetype: ARCHETYPES['crud-tracker'],
+    });
+    expect(prompt.toLowerCase()).toContain('empty state');
+    expect(prompt.toLowerCase()).toContain('error boundary');
+  });
+
   it('requires seed data realistic and relevant to the ICP', () => {
     const prompt = buildCodegenPrompt({
       manifest: manifest(),
@@ -146,15 +155,46 @@ describe('buildCodegenPrompt (#63)', () => {
   });
 });
 
+const ERROR_BOUNDARY_SNIPPET = `
+  class ErrorBoundary extends React.Component {
+    constructor(props) { super(props); this.state = { hasError: false }; }
+    static getDerivedStateFromError() { return { hasError: true }; }
+    componentDidCatch(error, info) { console.error(error, info); }
+    render() { return this.state.hasError ? <p>Something went wrong.</p> : this.props.children; }
+  }
+`;
+
 describe('checkContractViolations (#63)', () => {
   it('passes clean, contract-compliant code', () => {
     const code = `
+      ${ERROR_BOUNDARY_SNIPPET}
       export default function App() {
         const [items, setItems] = useState([]);
         return <div>{items.length}</div>;
       }
     `;
     expect(checkContractViolations(code)).toEqual([]);
+  });
+
+  it('flags a missing error boundary (#80)', () => {
+    const code = `
+      export default function App() {
+        const [items, setItems] = useState([]);
+        return <div>{items.length}</div>;
+      }
+    `;
+    expect(checkContractViolations(code)).toContain('missing_error_boundary');
+  });
+
+  it('accepts componentDidCatch as sufficient evidence of a real error boundary', () => {
+    const code = `
+      class Boundary extends React.Component {
+        componentDidCatch(error) { this.setState({ hasError: true }); }
+        render() { return this.props.children; }
+      }
+      export default function App() { return <Boundary><div /></Boundary>; }
+    `;
+    expect(checkContractViolations(code)).not.toContain('missing_error_boundary');
   });
 
   it('flags localStorage usage', () => {

@@ -8,7 +8,10 @@ import { createInMemoryAuthStore } from '../auth/auth-store.js';
 import { createInMemorySessionStore } from '../session-store.js';
 import { createInMemoryArtifactStore } from '../artifact-store.js';
 
-const CODE = 'export default function App() { return null; }';
+// Includes a minimal real error boundary (componentDidCatch) — required by
+// the missing_error_boundary contract rule (#80) for code to count as valid.
+const CODE =
+  'class B extends React.Component { componentDidCatch(e) {} render() { return this.props.children; } } export default function App() { return null; }';
 
 async function buildTestApp() {
   const app = Fastify({ logger: false });
