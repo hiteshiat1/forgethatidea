@@ -3,9 +3,16 @@ import { Anthropic } from '@anthropic-ai/sdk';
 export interface MessageStreamEvent {
   type: string;
   index?: number;
-  delta?: { type: string; text?: string };
+  /** `text_delta` carries `text`; `input_json_delta` (a tool_use block's streamed arguments — never read directly here, see anthropic-client.ts's module doc) carries `partial_json`. */
+  delta?: { type: string; text?: string; partial_json?: string };
   content_block?: { type: string; id?: string; name?: string; input?: unknown };
 }
+
+/** One resolved content block from the SDK's own finalMessage() — the authoritative, fully-accumulated shape (unlike the raw streamed events, a tool_use block here always has its complete input). */
+type FinalMessageContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'tool_use'; id: string; name: string; input: unknown }
+  | { type: string; [key: string]: unknown };
 
 export interface ToolUseBlock {
   type: 'tool_use';
@@ -99,7 +106,7 @@ export interface AnthropicSdkClient {
         id: string;
         stop_reason: string;
         usage: { input_tokens: number; output_tokens: number };
-        content: unknown[];
+        content: FinalMessageContentBlock[];
       }>;
     };
   };
@@ -160,45 +167,50 @@ export function createAnthropicClient(deps: AnthropicClientDeps) {
           ),
         });
 
-        // Built up from streamed events rather than read off finalMessage(),
-        // so the SDK's raw content shape never needs parsing separately —
-        // this codebase's typed AssistantContentBlock is the only shape
-        // callers ever see.
-        const content: AssistantContentBlock[] = [];
-        const textByIndex = new Map<number, string>();
-
+        // Only text is accumulated from raw streamed events (for onText's
+        // live incremental callback) — a tool_use block's real arguments
+        // are NOT available at content_block_start (the API always starts
+        // it with an empty input; the actual JSON streams in afterward as
+        // input_json_delta events on the same index) and this code never
+        // accumulated those deltas. That was a real production bug: every
+        // tool call's arguments were silently discarded, so every tool
+        // always received `{}` regardless of what the model actually sent.
+        // The SDK's own finalMessage() already does this accumulation
+        // correctly, so resolved tool_use content (and its real input) is
+        // sourced from there instead of rebuilt by hand.
         for await (const event of stream) {
           if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
-            const text = event.delta.text ?? '';
-            handlers.onText?.(text);
-            const index = event.index ?? 0;
-            textByIndex.set(index, (textByIndex.get(index) ?? '') + text);
+            handlers.onText?.(event.delta.text ?? '');
           } else if (
             event.type === 'content_block_start' &&
             event.content_block?.type === 'tool_use'
           ) {
             const block = event.content_block;
-            const toolUse: ToolUseBlock = {
+            // Fired as an early "a tool call is starting" signal only —
+            // its input is always empty at this point and must never be
+            // trusted as complete (see above). Real-time consumers that
+            // need the resolved input should read result.content instead.
+            handlers.onToolUse?.({
               type: 'tool_use',
               id: block.id ?? '',
               name: block.name ?? '',
               input: block.input,
-            };
-            handlers.onToolUse?.(toolUse);
-            content.push(toolUse);
+            });
           }
         }
 
-        // Text blocks are inserted at the start, in index order: the API
-        // streams a text block's deltas together before any later tool_use
-        // block starts, so accumulated text always precedes tool_use blocks
-        // that arrived after it.
-        const textBlocks: AssistantContentBlock[] = Array.from(textByIndex.entries())
-          .sort(([a], [b]) => a - b)
-          .map(([, text]) => ({ type: 'text' as const, text }));
-        content.unshift(...textBlocks);
-
         const final = await stream.finalMessage();
+        const content: AssistantContentBlock[] = final.content
+          .filter(
+            (block): block is Extract<FinalMessageContentBlock, { type: 'text' | 'tool_use' }> =>
+              block.type === 'text' || block.type === 'tool_use',
+          )
+          .map(
+            (block): AssistantContentBlock =>
+              block.type === 'tool_use'
+                ? { type: 'tool_use', id: block.id, name: block.name, input: block.input }
+                : { type: 'text', text: block.text },
+          );
         logger.info(
           {
             messageId: final.id,
