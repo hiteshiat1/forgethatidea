@@ -1,10 +1,16 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createAnthropicClient, type MessageStreamEvent } from './anthropic-client.js';
 
-/** Builds a fake SDK client whose `messages.stream` yields the given events. */
+/**
+ * Builds a fake SDK client whose `messages.stream` yields the given raw
+ * events, and whose `finalMessage()` resolves with `finalContent` — the
+ * SDK's own fully-accumulated content blocks (real tool_use input included).
+ * Defaults `finalContent` to `[]` only for tests that don't care about it.
+ */
 function fakeSdkClient(
   events: MessageStreamEvent[],
   usage = { input_tokens: 10, output_tokens: 5 },
+  finalContent: unknown[] = [],
 ) {
   return {
     messages: {
@@ -18,7 +24,7 @@ function fakeSdkClient(
             id: 'msg_1',
             stop_reason: 'end_turn',
             usage,
-            content: [],
+            content: finalContent,
           }),
         };
       }),
@@ -44,6 +50,12 @@ describe('createAnthropicClient', () => {
   });
 
   it('surfaces tool_use blocks to the dispatcher via onToolUse', async () => {
+    // The real API always starts a tool_use block with an empty input —
+    // the actual arguments stream in afterward as input_json_delta events
+    // (see the "streams a tool call's real arguments" test below) and are
+    // only fully assembled by the SDK's own finalMessage(). onToolUse fires
+    // at content_block_start purely as an early "a tool call is starting"
+    // signal; its input is not meant to be trusted as complete.
     const sdk = fakeSdkClient([
       {
         type: 'content_block_start',
@@ -60,6 +72,60 @@ describe('createAnthropicClient', () => {
     );
 
     expect(toolUses).toEqual([{ type: 'tool_use', id: 'toolu_1', name: 'get_weather', input: {} }]);
+  });
+
+  it('resolves tool_use blocks in the result with their real, fully-streamed input from finalMessage — not the empty input from content_block_start (#manifest-bug)', async () => {
+    // Regression test for a real production bug: tool_use arguments stream
+    // in as input_json_delta events *after* content_block_start (which
+    // always has an empty input) — the previous implementation built its
+    // result content from raw streamed events and never accumulated those
+    // deltas, so every tool call's real arguments were silently discarded
+    // and every tool always received `{}`. The SDK's own finalMessage()
+    // already does this accumulation correctly; the fix is to source
+    // resolved content from there instead of from hand-rolled event state.
+    const sdk = fakeSdkClient(
+      [
+        {
+          type: 'content_block_start',
+          index: 0,
+          content_block: { type: 'tool_use', id: 'toolu_1', name: 'update_manifest', input: {} },
+        },
+        {
+          type: 'content_block_delta',
+          index: 0,
+          delta: { type: 'input_json_delta', partial_json: '{"patch":' },
+        },
+        {
+          type: 'content_block_delta',
+          index: 0,
+          delta: { type: 'input_json_delta', partial_json: '{"productName":"HabitLoop"}}' },
+        },
+      ],
+      undefined,
+      [
+        {
+          type: 'tool_use',
+          id: 'toolu_1',
+          name: 'update_manifest',
+          input: { patch: { productName: 'HabitLoop' } },
+        },
+      ],
+    );
+    const client = createAnthropicClient({ sdkClient: sdk as never, logger: silentLogger() });
+
+    const result = await client.streamMessage(
+      { model: 'claude-opus-5', maxTokens: 100, messages: [{ role: 'user', content: 'hi' }] },
+      {},
+    );
+
+    expect(result.content).toEqual([
+      {
+        type: 'tool_use',
+        id: 'toolu_1',
+        name: 'update_manifest',
+        input: { patch: { productName: 'HabitLoop' } },
+      },
+    ]);
   });
 
   it('logs token usage per request', async () => {
@@ -166,19 +232,29 @@ describe('createAnthropicClient', () => {
   });
 
   it('collects assistant content blocks (text + tool_use) into the result for building the next turn', async () => {
-    const sdk = fakeSdkClient([
-      { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Checking...' } },
-      {
-        type: 'content_block_start',
-        index: 1,
-        content_block: {
-          type: 'tool_use',
-          id: 'toolu_1',
-          name: 'get_weather',
-          input: { city: 'NYC' },
+    const sdk = fakeSdkClient(
+      [
+        {
+          type: 'content_block_delta',
+          index: 0,
+          delta: { type: 'text_delta', text: 'Checking...' },
         },
-      },
-    ]);
+        {
+          type: 'content_block_start',
+          index: 1,
+          content_block: { type: 'tool_use', id: 'toolu_1', name: 'get_weather', input: {} },
+        },
+      ],
+      undefined,
+      // result.content is now sourced entirely from finalMessage() (see
+      // anthropic-client.ts's module doc) — onText's live callback still
+      // reads text deltas as they stream, but the resolved content array
+      // itself, text included, comes from the SDK's own accumulation.
+      [
+        { type: 'text', text: 'Checking...' },
+        { type: 'tool_use', id: 'toolu_1', name: 'get_weather', input: { city: 'NYC' } },
+      ],
+    );
     const client = createAnthropicClient({ sdkClient: sdk as never, logger: silentLogger() });
 
     const result = await client.streamMessage(
