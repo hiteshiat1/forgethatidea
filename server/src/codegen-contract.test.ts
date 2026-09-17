@@ -143,6 +143,15 @@ describe('buildCodegenPrompt (#63)', () => {
     expect(prompt.toLowerCase()).toContain('plain language');
   });
 
+  it('embeds the standardized mobile-responsive layout pattern (#81)', () => {
+    const prompt = buildCodegenPrompt({
+      manifest: manifest(),
+      archetype: ARCHETYPES['crud-tracker'],
+    });
+    expect(prompt.toLowerCase()).toContain('mobile-responsive layout');
+    expect(prompt.toLowerCase()).toContain('horizontal scroll');
+  });
+
   it('requires seed data realistic and relevant to the ICP', () => {
     const prompt = buildCodegenPrompt({
       manifest: manifest(),
@@ -204,6 +213,30 @@ describe('checkContractViolations (#63)', () => {
       export default function App() { return <Boundary><div /></Boundary>; }
     `;
     expect(checkContractViolations(code)).not.toContain('missing_error_boundary');
+  });
+
+  it('flags a fixed pixel layout width of 300px or more (#81)', () => {
+    const code = `
+      ${ERROR_BOUNDARY_SNIPPET}
+      export default function App() {
+        return <div style={{ width: '600px' }}>Content</div>;
+      }
+    `;
+    expect(checkContractViolations(code)).toContain('fixed_pixel_layout_width');
+  });
+
+  it('does not flag maxWidth/minWidth, or a small fixed width like an icon size', () => {
+    const code = `
+      ${ERROR_BOUNDARY_SNIPPET}
+      export default function App() {
+        return (
+          <div style={{ maxWidth: '600px', minWidth: '400px' }}>
+            <img style={{ width: '24px' }} />
+          </div>
+        );
+      }
+    `;
+    expect(checkContractViolations(code)).not.toContain('fixed_pixel_layout_width');
   });
 
   it('flags localStorage usage', () => {

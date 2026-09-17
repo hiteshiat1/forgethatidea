@@ -6,6 +6,7 @@ import { buildBrandingInjectionPattern } from './branding-injection.js';
 import { buildNavPattern } from './nav-pattern.js';
 import { buildUiStatesPattern } from './ui-states-pattern.js';
 import { buildTransparencyPanelPattern } from './transparency-panel-pattern.js';
+import { buildResponsivePattern } from './responsive-pattern.js';
 
 /**
  * Generator prompt & output contract (Epic 4.2). Two halves of the same
@@ -18,7 +19,7 @@ import { buildTransparencyPanelPattern } from './transparency-panel-pattern.js';
  * whenever either half changes in a way that could affect generated output,
  * matching the SYSTEM_PROMPT_VERSION convention in system-prompt.ts.
  */
-export const CODEGEN_CONTRACT_VERSION = '2026-09-17.7';
+export const CODEGEN_CONTRACT_VERSION = '2026-09-17.8';
 
 export interface CodegenPromptInput {
   manifest: BuildManifest;
@@ -75,6 +76,8 @@ ${buildUiStatesPattern()}
 
 ${buildTransparencyPanelPattern()}
 
+${buildResponsivePattern()}
+
 Out of scope for this archetype in v1 — do not attempt:
 ${archetype.outOfScope.map((item) => `- ${item}`).join('\n')}
 
@@ -88,11 +91,28 @@ export type ContractViolation =
   | 'forbidden_fetch'
   | 'forbidden_form_tag'
   | 'missing_default_export'
-  | 'missing_error_boundary';
+  | 'missing_error_boundary'
+  | 'fixed_pixel_layout_width';
 
 interface ViolationRule {
   code: ContractViolation;
   test: (code: string) => boolean;
+}
+
+const FIXED_PIXEL_WIDTH_PATTERN = /(?<!max|min)[wW]idth:\s*['"]?(\d+)px/g;
+
+/**
+ * True when the code sets a hardcoded `width` (not `maxWidth`/`minWidth`) of
+ * 300px or more anywhere — the static pattern most likely to force
+ * horizontal scroll on a 375px phone screen (Epic 4.20). A real layout
+ * engine isn't available in this pipeline to measure actual overflow, so
+ * this targets the specific static pattern that causes it instead.
+ */
+function hasFixedPixelLayoutWidth(code: string): boolean {
+  for (const found of code.matchAll(FIXED_PIXEL_WIDTH_PATTERN)) {
+    if (Number(found[1]) >= 300) return true;
+  }
+  return false;
 }
 
 const RULES: ViolationRule[] = [
@@ -109,6 +129,7 @@ const RULES: ViolationRule[] = [
     code: 'missing_error_boundary',
     test: (code) => !/componentDidCatch|getDerivedStateFromError/.test(code),
   },
+  { code: 'fixed_pixel_layout_width', test: hasFixedPixelLayoutWidth },
 ];
 
 /**
