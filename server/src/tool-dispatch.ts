@@ -22,6 +22,22 @@ export interface ToolDispatcherDeps {
 }
 
 /**
+ * A tool's own resolved content can still represent a domain-level failure
+ * (e.g. `{ok: false, error: 'no_manifest_to_merge_into'}`) without the
+ * handler having thrown — this is the shape every tool in this codebase
+ * uses for an expected, typed failure (manifest-tools.ts, the render_*
+ * card tools, etc.), distinct from an actual bug in the handler itself.
+ */
+function isDomainFailure(content: unknown): boolean {
+  return (
+    typeof content === 'object' &&
+    content !== null &&
+    'ok' in content &&
+    (content as { ok: unknown }).ok === false
+  );
+}
+
+/**
  * Tool-call dispatch loop (Epic 2.4): the orchestrator's bridge between a
  * model's `tool_use` blocks and the server-side handlers that satisfy them.
  * Maps tool name -> handler, executes it, and normalizes both an unknown
@@ -46,6 +62,24 @@ export function createToolDispatcher(deps: ToolDispatcherDeps) {
 
     try {
       const content = await handler(block.input);
+      if (isDomainFailure(content)) {
+        // A tool that resolves normally but reports its own failure (e.g.
+        // manifest-tools.ts's `{ok: false, error: ...}`) is not a dispatch
+        // error — the model still gets the result and can react to it. But
+        // it must be observable in logs: a manifest write silently rejected
+        // with no diagnostic trail (visible only as a vague complaint from
+        // a user much later) was a real production bug this logging exists
+        // to prevent a recurrence of.
+        logger.warn(
+          { toolUseId: block.id, tool: block.name, input: block.input, result: content },
+          'tool call resolved with a domain-level failure',
+        );
+      } else {
+        logger.info(
+          { toolUseId: block.id, tool: block.name, input: block.input, result: content },
+          'tool call dispatched',
+        );
+      }
       return { toolUseId: block.id, isError: false, content };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

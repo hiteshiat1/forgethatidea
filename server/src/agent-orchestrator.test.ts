@@ -791,3 +791,44 @@ describe('session analytics events (#42)', () => {
     );
   });
 });
+
+describe('tool call diagnostic logging', () => {
+  it('forwards a real logger to the tool dispatcher so tool calls are observable in logs', async () => {
+    // Regression coverage for a real production bug: update_manifest's own
+    // domain-level rejection (no_manifest_to_merge_into) was invisible in
+    // logs because the orchestrator always used a hardcoded silent logger
+    // for tool dispatch, regardless of what logger the caller configured.
+    const anthropicClient = scriptedAnthropicClient([
+      {
+        inputTokens: 5,
+        outputTokens: 2,
+        stopReason: 'tool_use',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'toolu_1',
+            name: 'update_manifest',
+            input: { patch: { productName: 'HabitLoop' } },
+          },
+        ],
+      },
+      {
+        inputTokens: 1,
+        outputTokens: 1,
+        stopReason: 'end_turn',
+        content: [{ type: 'text', text: 'ok' }],
+      },
+    ]);
+    const deps = buildDeps(anthropicClient);
+    const session = await deps.sessionStore.create('user-1');
+    const logger = silentLogger();
+    const orchestrator = createAgentOrchestrator({ ...deps, logger });
+
+    await orchestrator.handleTurn(session.id, 'user-1', 'set the product name');
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ tool: 'update_manifest' }),
+      'tool call resolved with a domain-level failure',
+    );
+  });
+});

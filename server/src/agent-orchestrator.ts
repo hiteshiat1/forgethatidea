@@ -5,7 +5,7 @@ import type {
   StreamMessageRequest,
 } from './anthropic-client.js';
 import { buildSystemPrompt } from './system-prompt.js';
-import { createToolDispatcher, type ToolRegistry } from './tool-dispatch.js';
+import { createToolDispatcher, type ToolRegistry, type Logger } from './tool-dispatch.js';
 import { createManifestTools } from './manifest-tools.js';
 import { createSourcesTools } from './sources-tools.js';
 import { createPhaseTransitionTool } from './phase-transition-tool.js';
@@ -52,6 +52,15 @@ export interface AgentOrchestratorDeps {
   keepRecentMessages?: number;
   /** Session analytics sink (#42) — defaults to a no-op so it's opt-in until build-app.ts wires the real logger. */
   analyticsLogger?: AnalyticsLogger;
+  /**
+   * Diagnostic logger for tool call dispatch — every tool call is logged at
+   * info level (or warn, for a tool's own domain-level failure result), so
+   * a rejection like update_manifest's `no_manifest_to_merge_into` is
+   * visible in logs instead of only surfacing as a vague user complaint
+   * much later with no diagnostic trail. Defaults to silent so tests don't
+   * need to pass one; build-app.ts wires the real Fastify logger.
+   */
+  logger?: Logger;
 }
 
 export interface HandleTurnSuccess {
@@ -350,6 +359,7 @@ export function createAgentOrchestrator(deps: AgentOrchestratorDeps) {
   const maxToolRounds = deps.maxToolRounds ?? DEFAULT_MAX_TOOL_ROUNDS;
   const keepRecentMessages = deps.keepRecentMessages ?? DEFAULT_KEEP_RECENT_MESSAGES;
   const analyticsLogger = deps.analyticsLogger ?? { info: () => {} };
+  const logger = deps.logger ?? silentLogger();
 
   async function handleTurn(
     sessionId: string,
@@ -436,7 +446,7 @@ export function createAgentOrchestrator(deps: AgentOrchestratorDeps) {
       select_marketing_plan: marketingPlansTool.select_marketing_plan,
       ...deps.extraTools,
     };
-    const dispatcher = createToolDispatcher({ tools: toolRegistry, logger: silentLogger() });
+    const dispatcher = createToolDispatcher({ tools: toolRegistry, logger });
 
     const compactedHistory = compactChatHistory(session.chat as ChatMessage[], keepRecentMessages);
     const system = buildSystemPrompt({ phase: session.phase });
