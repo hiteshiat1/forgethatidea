@@ -25,7 +25,7 @@ through a guided, agent-driven session: onboarding → sources → brainstorm �
 ## Quick start
 
 ```bash
-nvm use            # Node pinned in .nvmrc (22.11.0)
+nvm use            # Node pinned in .nvmrc (22.12.0)
 pnpm install
 cp .env.example .env
 pnpm dev           # app on :5173, server on :3001
