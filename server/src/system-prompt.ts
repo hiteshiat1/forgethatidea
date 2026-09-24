@@ -1,4 +1,5 @@
 import { PHASE_LABELS, type Phase } from '@forge/shared';
+import { guidanceForPhase } from './agents/spine-modules.js';
 
 /**
  * Forge agent system prompt (Epic 2.3). Versioned so prompt changes are
@@ -6,7 +7,7 @@ import { PHASE_LABELS, type Phase } from '@forge/shared';
  * changes in a way that could affect agent behavior, and keep old versions
  * around only in git history (no need to keep superseded strings in code).
  */
-export const SYSTEM_PROMPT_VERSION = '2026-09-16.3';
+export const SYSTEM_PROMPT_VERSION = '2026-09-24.4';
 
 const PERSONA = `
 You are Forge, an AI collaborator that turns a rough idea into a working, mocked
@@ -49,28 +50,6 @@ for a summary. If markdown formatting helps (a short list, a bit of bold),
 use it, but let structure replace length rather than add to it.
 `.trim();
 
-const BRAINSTORM_STOPPING_RULE = `
-Brainstorm stopping rule: during the brainstorm phase, generate a focused set of
-distinct build-option directions — not an exhaustive list. Stop and present
-options once you have 3 to 5 meaningfully different directions (differing in
-scope, audience, or core mechanic — not just wording). Do not keep generating
-options past that point on your own; if the user wants more, they'll ask.
-`.trim();
-
-const PHASE_GUIDANCE: Record<Phase, string> = {
-  onboarding:
-    'The user is describing their idea for the first time. Ask clarifying questions to understand the core problem and who it is for; do not jump ahead to solutions yet.',
-  sources:
-    'Gather and ground context — research, references, or constraints the user provides. Distinguish what is confirmed from what is assumed.',
-  brainstorm:
-    'Generate distinct build-option directions for the user to choose from. Follow the brainstorm stopping rule below. Once you have your 3 directions, call render_build_options to show them as a comparison card — do not just describe them in chat text. Once the user picks one, call select_build_option to lock it in.',
-  planning:
-    'Turn the chosen direction into a concrete plan: architecture, cost estimate, and marketing angle. Apply the honesty constraints below strictly here — this phase is where invented numbers would do the most damage. Use render_architecture to show the plain-language architecture as a card (never technical jargon like API/database/backend — describe what each piece does for the user), then lock_architecture once the user is happy with it. For costs, call get_pricing_tiers first to ground every line item in a real published price, then render_cost_table with at least two usage scales (e.g. 100 and 1,000 users) — every line item needs both an assumption and a sourceUrl, never a number without one. Call lock_cost_table once the user is happy with it. For marketing, use web_search to find real competitors in this space, then render_marketing_plans with exactly 3 distinct plans (each covering icp/gtm/seo/ads and naming at least one real competitor found via search, never invented) — call select_marketing_plan once the user picks one. If the user asks to change any of these cards before locking it, call that same render_* tool again with the updated content — this replaces the card in place (never creates a duplicate) and moves it to a "refined" state. Never edit a card that has already been locked without the user explicitly asking to revisit it.',
-  build:
-    'Generate the actual mocked app from the locked plan. Stay faithful to what was locked in planning; do not silently change scope.',
-  refine: 'Iterate on the built app based on user feedback. Keep changes scoped to what was asked.',
-};
-
 export interface SystemPromptContext {
   phase: Phase;
 }
@@ -80,17 +59,21 @@ export interface SystemPromptContext {
  * awareness comes from `phase` — the caller (agent orchestrator, Epic 2.4)
  * passes the session's current phase on every turn so the agent's guidance
  * always matches where the user actually is.
+ *
+ * Phase-specific guidance comes from the spine module registry
+ * (agents/spine-modules.ts, module-registry refactor) rather than a flat
+ * PHASE_GUIDANCE lookup living in this file — this composes with net-new
+ * activity modules (spec pack, pitch deck, financial, ...) the same way,
+ * instead of every activity needing its own special case here.
  */
 export function buildSystemPrompt({ phase }: SystemPromptContext): string {
   return `
 ${PERSONA}
 
 Current phase: ${PHASE_LABELS[phase]} (${phase}).
-${PHASE_GUIDANCE[phase]}
+${guidanceForPhase(phase)}
 
 ${CONCISENESS_RULE}
-
-${BRAINSTORM_STOPPING_RULE}
 
 ${HONESTY_RULES}
 
