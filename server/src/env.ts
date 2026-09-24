@@ -54,6 +54,15 @@ const envSchema = z.object({
   // refine-app calls on the same session — catches rapid-fire/scripted
   // spam without affecting normal human pace between refinements.
   REFINEMENT_RATE_LIMIT_MS: z.coerce.number().int().nonnegative().default(3000),
+
+  // Tier price points (Epic 6.1). Env-configurable so prices can be tuned
+  // (or set to a small test value) without a code change — tier-catalog.ts
+  // is the single source of truth these feed into. Defaults are launch
+  // placeholders, not researched pricing.
+  PRICE_APP_REFINEMENT_TOPUP_CENTS: z.coerce.number().int().positive().default(500), // $5.00
+  PRICE_SPEC_PACK_CENTS: z.coerce.number().int().positive().default(1900), // $19.00
+  PRICE_PITCH_DECK_CENTS: z.coerce.number().int().positive().default(2900), // $29.00
+  PRICE_FINANCIAL_PACK_CENTS: z.coerce.number().int().positive().default(4900), // $49.00
 });
 
 export type Env = z.infer<typeof envSchema>;
