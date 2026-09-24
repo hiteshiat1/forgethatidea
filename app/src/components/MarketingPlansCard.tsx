@@ -34,7 +34,7 @@ export function MarketingPlansCard({
   }
 
   return (
-    <CanvasCard title="Marketing plans" index={index} status={status} accent="signal">
+    <CanvasCard title="Marketing plans" index={index} status={status} accent="planning">
       <div className="marketing-plans-card__grid">
         {content.plans.map((plan, i) => {
           const isSelected = content.selectedIndex === i;

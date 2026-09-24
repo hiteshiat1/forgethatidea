@@ -35,7 +35,7 @@ export function CostTableCard({
   const scale = content.scales[activeScaleIndex] ?? content.scales[0]!;
 
   return (
-    <CanvasCard title="Cost estimate" index={index} status={status} accent="signal">
+    <CanvasCard title="Cost estimate" index={index} status={status} accent="planning">
       {content.scales.length > 1 && (
         <div className="cost-table-card__scale-toggle" role="tablist" aria-label="Usage scale">
           {content.scales.map((s, i) => (
