@@ -1,6 +1,20 @@
-/* Marketing landing page ('/'), the front door before AuthGate. */
+/* Marketing landing page ('/'), the front door before AuthGate.
+ *
+ * Section-progression palette (docs/landing-page-and-ui.md):
+ * https://coolors.co/palette/0d3b66-faf0ca-f4d35e-ee964b-f95738 — each
+ * section below carries one accent as it progresses through the pitch
+ * (deep blue -> yellow -> orange -> red -> deep blue). Scoped to
+ * .landing-page only; the app's existing dark "ink" base and global
+ * --forge-* tokens (used everywhere else) are untouched.
+ */
 
 .landing-page {
+  --lp-deep: #0d3b66;
+  --lp-cream: #faf0ca;
+  --lp-yellow: #f4d35e;
+  --lp-orange: #ee964b;
+  --lp-red: #f95738;
+
   min-height: 100vh;
   background: var(--forge-ink-900);
   color: var(--forge-slate-100);
@@ -36,11 +50,15 @@
   color: var(--forge-slate-100);
 }
 
+.landing-page__headline-accent {
+  color: var(--lp-orange);
+}
+
 .landing-page__subhead {
   margin: 0;
   font-size: var(--forge-font-size-lg, 1.125rem);
   color: var(--forge-slate-300);
-  max-width: 56ch;
+  max-width: 60ch;
 }
 
 .landing-page__cta-row {
@@ -60,13 +78,55 @@
   max-width: 960px;
   margin: 0 auto;
   width: 100%;
+  border-top: 1px solid var(--forge-ink-600);
 }
 
 .landing-page__section-title {
-  margin: 0 0 var(--forge-space-6);
+  margin: 0 0 var(--forge-space-4);
   font-size: var(--forge-font-size-xl, 1.5rem);
   font-weight: 700;
   text-align: center;
+}
+
+.landing-page__section-lead {
+  margin: 0 auto;
+  max-width: 62ch;
+  text-align: center;
+  font-size: var(--forge-font-size-lg, 1.125rem);
+  line-height: 1.6;
+  color: var(--forge-slate-200);
+}
+
+/* Section accent: a thin top rule + heading color per the palette
+   progression, kept subtle against the dark base rather than switching
+   the section background (see landing-page-and-ui.md's "keep dark base,
+   use the 5 colors as section accents" direction). */
+.landing-page__section--deep {
+  border-top-color: var(--lp-deep);
+}
+.landing-page__section--deep .landing-page__section-title {
+  color: var(--forge-slate-100);
+}
+
+.landing-page__section--yellow {
+  border-top-color: var(--lp-yellow);
+}
+.landing-page__section--yellow .landing-page__section-title {
+  color: var(--lp-yellow);
+}
+
+.landing-page__section--orange {
+  border-top-color: var(--lp-orange);
+}
+.landing-page__section--orange .landing-page__section-title {
+  color: var(--lp-orange);
+}
+
+.landing-page__section--red {
+  border-top-color: var(--lp-red);
+}
+.landing-page__section--red .landing-page__section-title {
+  color: var(--lp-red);
 }
 
 .landing-page__steps {
@@ -74,7 +134,7 @@
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: var(--forge-space-6);
   list-style: none;
-  margin: 0;
+  margin: var(--forge-space-6) 0 0;
   padding: 0;
 }
 
@@ -91,7 +151,7 @@
   width: 28px;
   height: 28px;
   border-radius: var(--forge-radius-pill);
-  background: var(--forge-gradient-signal);
+  background: var(--lp-orange);
   color: var(--forge-ink-900);
   font-weight: 700;
   font-size: 0.875rem;
@@ -106,17 +166,20 @@
 .landing-page__step-detail {
   font-size: 0.9rem;
   color: var(--forge-slate-300);
+  line-height: 1.5;
 }
 
 .landing-page__value-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: var(--forge-space-6);
+  margin-top: var(--forge-space-6);
 }
 
 .landing-page__value-card {
   background: var(--forge-ink-700);
   border: 1px solid var(--forge-ink-500);
+  border-left: 3px solid var(--lp-red);
   border-radius: var(--forge-radius-lg);
   padding: var(--forge-space-4);
 }
