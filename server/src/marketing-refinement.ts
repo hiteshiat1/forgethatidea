@@ -79,18 +79,30 @@ export function createMarketingRefinementTool(deps: MarketingRefinementToolDeps)
     }
 
     const renderResult = await renderMarketingPlans(rawInput);
-    if (!renderResult.ok) {
-      // Explicit reconstruction rather than `return renderResult` — its type
-      // (RenderMarketingPlansResult's failure variants) is structurally
-      // similar to but not identical to RefineMarketingPlansResult's, and
-      // returning it directly has caused a Vercel-only build failure here
-      // even though local tsc accepted it (see CLAUDE.md's documented
-      // narrowing-across-unions pattern).
-      return { ok: false, error: renderResult.error };
+
+    // Checked as `renderResult.ok === true` (not `!renderResult.ok`) and the
+    // error read off a locally re-typed copy rather than narrowing
+    // RenderMarketingPlansResult (imported from another module) in place —
+    // narrowing that import has twice caused a Vercel-only build failure
+    // here even though local tsc accepted it cleanly both times (see
+    // CLAUDE.md's documented narrowing-across-unions pattern). This avoids
+    // depending on cross-module narrowing at all rather than trying a third
+    // variant of it.
+    if (renderResult.ok !== true) {
+      const failure = renderResult as { ok: false; error: 'session_not_found' | 'invalid_input' };
+      return { ok: false, error: failure.error };
     }
+    const successResult = renderResult as {
+      ok: true;
+      card: SessionCard & { content: MarketingPlansCardContent };
+    };
 
     if (!isPostLockRefinement) {
-      return { ok: true, card: renderResult.card, rounds: session.marketingRefinementRounds };
+      return {
+        ok: true,
+        card: successResult.card,
+        rounds: session.marketingRefinementRounds,
+      };
     }
 
     // Re-lock after a post-lock refinement — the render tool itself always
