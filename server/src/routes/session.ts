@@ -15,10 +15,17 @@ import { checkBrainstormStoppingRule } from '../brainstorm-logic.js';
 import { checkSourcesIntakeComplete } from '../sources-logic.js';
 import { emitAnalyticsEvent } from '../analytics.js';
 
+// `cards` is deliberately NOT client-writable here (#92): every real card
+// mutation happens server-side, either via the render_* tool factories the
+// agent's tool calls invoke, or via card-selection.ts's direct-click routes
+// (which delegate to that same tool logic) — never via raw client-supplied
+// content on this generic PATCH. Accepting an arbitrary `cards` array here
+// let a client fabricate "locked" cards to pass the build gate without ever
+// genuinely locking anything, since the phase-gate check below only has
+// this request's own body and the session's stored state to consult.
 const updateSchema = z.object({
   phase: z.enum(PHASES).optional(),
   chat: z.array(z.unknown()).optional(),
-  cards: z.array(z.unknown()).optional(),
 });
 
 const brainstormFindingsSchema = z.object({
@@ -30,6 +37,22 @@ const brainstormFindingsSchema = z.object({
 const refineSchema = z.object({
   kind: z.enum(['app', 'marketing']),
 });
+
+/**
+ * True when a raw request body includes a `cards` field — never legitimate
+ * on this route (#92: `cards` isn't in `updateSchema`; no real client ever
+ * sends one). Checked against the raw body, before Zod's default
+ * unknown-key stripping silently discards it, so an attempt to smuggle
+ * fabricated card state past the phase gate is observable rather than
+ * disappearing without a trace.
+ */
+export function isCardTamperAttempt(rawBody: unknown): boolean {
+  return (
+    rawBody !== null &&
+    typeof rawBody === 'object' &&
+    'cards' in (rawBody as Record<string, unknown>)
+  );
+}
 
 /**
  * Session persistence & resume routes (Epic 1.10). All routes require an
@@ -109,6 +132,13 @@ export function registerSessionRoutes(
     '/api/sessions/:id',
     { preHandler: auth },
     async (request, reply) => {
+      if (isCardTamperAttempt(request.body)) {
+        request.log.warn(
+          { sessionId: request.params.id, userId: request.userId },
+          'rejected client-supplied cards field on session PATCH — possible gate-tamper attempt',
+        );
+      }
+
       const parsed = updateSchema.safeParse(request.body);
       if (!parsed.success) {
         return reply.status(400).send({ error: 'validation_failed' });
@@ -121,7 +151,7 @@ export function registerSessionRoutes(
 
       // Phase state machine (Epic 2.1): a phase change must be a legal
       // transition from the session's current phase — never an arbitrary
-      // jump. Chat/cards updates don't touch the phase and skip this check.
+      // jump. A chat-only update doesn't touch the phase and skips this check.
       if (parsed.data.phase !== undefined) {
         try {
           transition(existing.phase, parsed.data.phase);
@@ -138,11 +168,12 @@ export function registerSessionRoutes(
 
         // Phase gate enforcement (Epic 2.2): a structurally legal transition
         // can still be blocked by content rules — e.g. build requires all
-        // four deliverable cards locked first. Evaluated against the
-        // session's *current* cards, since this update's own `cards` (if
-        // any) haven't been persisted yet.
-        const cards = (parsed.data.cards ?? existing.cards) as SessionCard[];
-        const gate = checkGate(parsed.data.phase, cards);
+        // four deliverable cards locked first. Always evaluated against the
+        // session's own persisted cards (#92) — `cards` isn't a field this
+        // request can supply at all (see updateSchema), so there's nothing
+        // else it could mean anyway, but the intent is explicit: never trust
+        // a client-supplied value for a gated check.
+        const gate = checkGate(parsed.data.phase, existing.cards as SessionCard[]);
         if (!gate.passed) {
           return reply.status(409).send({
             error: 'phase_gate_not_satisfied',
