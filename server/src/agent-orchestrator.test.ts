@@ -832,3 +832,74 @@ describe('tool call diagnostic logging', () => {
     );
   });
 });
+
+describe('marketing refinement loop (#88)', () => {
+  const PLAN = {
+    name: 'Community-led growth',
+    icp: 'Solo founders',
+    gtm: 'Indie-hacker communities',
+    seo: 'Long-tail SEO',
+    ads: 'Small retargeting budget',
+    competitors: ['Bubble'],
+  };
+  const PLANS_INPUT = {
+    plans: [PLAN, { ...PLAN, name: 'Plan B' }, { ...PLAN, name: 'Plan C' }],
+  };
+
+  it('exposes refine_marketing_plans as a tool the model can call', async () => {
+    const anthropicClient = scriptedAnthropicClient([
+      {
+        inputTokens: 5,
+        outputTokens: 2,
+        stopReason: 'tool_use',
+        content: [
+          { type: 'tool_use', id: 'toolu_1', name: 'refine_marketing_plans', input: PLANS_INPUT },
+        ],
+      },
+      {
+        inputTokens: 1,
+        outputTokens: 1,
+        stopReason: 'end_turn',
+        content: [{ type: 'text', text: 'Updated the marketing plan.' }],
+      },
+    ]);
+    const deps = buildDeps(anthropicClient);
+    const session = await deps.sessionStore.create('user-1');
+    const orchestrator = createAgentOrchestrator(deps);
+
+    const result = await orchestrator.handleTurn(session.id, 'user-1', 'tweak the marketing plan');
+
+    expect(result.ok).toBe(true);
+    const updated = await deps.sessionStore.get(session.id);
+    const card = (updated!.cards as { type: string }[]).find((c) => c.type === 'marketing');
+    expect(card).toBeDefined();
+  });
+
+  it('consumes a marketing refinement round only once the session has reached refine phase', async () => {
+    const anthropicClient = scriptedAnthropicClient([
+      {
+        inputTokens: 5,
+        outputTokens: 2,
+        stopReason: 'tool_use',
+        content: [
+          { type: 'tool_use', id: 'toolu_1', name: 'refine_marketing_plans', input: PLANS_INPUT },
+        ],
+      },
+      {
+        inputTokens: 1,
+        outputTokens: 1,
+        stopReason: 'end_turn',
+        content: [{ type: 'text', text: 'Updated the marketing plan.' }],
+      },
+    ]);
+    const deps = buildDeps(anthropicClient);
+    const session = await deps.sessionStore.create('user-1');
+    await deps.sessionStore.update(session.id, { phase: 'refine' });
+    const orchestrator = createAgentOrchestrator(deps);
+
+    await orchestrator.handleTurn(session.id, 'user-1', 'tweak the marketing plan');
+
+    const updated = await deps.sessionStore.get(session.id);
+    expect(updated!.marketingRefinementRounds).toBe(1);
+  });
+});

@@ -350,6 +350,7 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
       },
       analyticsLogger,
       logger: app.log,
+      refinementLimits,
     });
     registerAgentRoutes(app, authStore, sessionStore, orchestrator);
   }

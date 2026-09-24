@@ -14,6 +14,8 @@ import { createRenderBuildOptionsTool } from './render-build-options-tool.js';
 import { createRenderArchitectureTool } from './render-architecture-tool.js';
 import { createRenderCostTableTool } from './render-cost-table-tool.js';
 import { createRenderMarketingPlansTool } from './render-marketing-plans-tool.js';
+import { createMarketingRefinementTool } from './marketing-refinement.js';
+import type { RefinementLimits } from './refinement-tracker.js';
 import { compactChatHistory } from './conversation-compaction.js';
 import { emitAnalyticsEvent, type AnalyticsLogger } from './analytics.js';
 import type { TurnEvent } from './turn-events.js';
@@ -48,6 +50,8 @@ export interface AgentOrchestratorDeps {
   extraTools?: ToolRegistry;
   /** Max tool-call round-trips per turn before giving up rather than looping forever on a confused model. */
   maxToolRounds?: number;
+  /** Free-tier refinement round ceilings (Epic 2.11) — defaults match env.ts's FREE_APP/MARKETING_REFINEMENT_LIMIT default of 3. Only `marketing` is consulted here (refine_marketing_plans, #88); `app` refinement goes through refine-app-orchestrator.ts's own route, not this orchestrator. */
+  refinementLimits?: RefinementLimits;
   /** Messages kept verbatim before older ones are compacted into a summary (#37) — see DEFAULT_KEEP_RECENT_MESSAGES. */
   keepRecentMessages?: number;
   /** Session analytics sink (#42) — defaults to a no-op so it's opt-in until build-app.ts wires the real logger. */
@@ -98,6 +102,8 @@ export function isHandleTurnFailure(result: HandleTurnResult): result is HandleT
 const DEFAULT_MODEL = 'claude-opus-5';
 const DEFAULT_MAX_TOKENS = 2048;
 const DEFAULT_MAX_TOOL_ROUNDS = 5;
+/** Matches env.ts's FREE_APP_REFINEMENT_LIMIT/FREE_MARKETING_REFINEMENT_LIMIT default. */
+const DEFAULT_REFINEMENT_LIMITS: RefinementLimits = { app: 3, marketing: 3 };
 /**
  * How many of the most recent chat messages stay verbatim before older ones
  * are collapsed into one compaction summary (#37) — keeps both the model
@@ -333,6 +339,33 @@ const BUILT_IN_TOOL_SCHEMAS = {
       required: ['index'],
     },
   },
+  refine_marketing_plans: {
+    description:
+      'Update the marketing plan after it has already been locked once, in response to a user change request during the refine phase (e.g. "change the ads angle" or "target a different ICP"). Present the SAME 3-plan structure as render_marketing_plans (icp/gtm/seo/ads/competitors for all 3 plans, not just the one the user asked to change), with your requested edits applied — this replaces the whole set and re-locks it. Each free-tier session has a limited number of these refinement rounds; if the limit is reached, tell the user plainly rather than calling this again. During planning (before the first lock), use render_marketing_plans instead — this tool is only for post-lock refinement.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        plans: {
+          type: 'array',
+          minItems: 3,
+          maxItems: 3,
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              icp: { type: 'string' },
+              gtm: { type: 'string' },
+              seo: { type: 'string' },
+              ads: { type: 'string' },
+              competitors: { type: 'array', items: { type: 'string' }, minItems: 1 },
+            },
+            required: ['name', 'icp', 'gtm', 'seo', 'ads', 'competitors'],
+          },
+        },
+      },
+      required: ['plans'],
+    },
+  },
 } as const;
 
 function toAnthropicMessages(chat: ChatMessage[]): AnthropicMessageParam[] {
@@ -357,6 +390,7 @@ export function createAgentOrchestrator(deps: AgentOrchestratorDeps) {
   const model = deps.model ?? DEFAULT_MODEL;
   const maxTokens = deps.maxTokens ?? DEFAULT_MAX_TOKENS;
   const maxToolRounds = deps.maxToolRounds ?? DEFAULT_MAX_TOOL_ROUNDS;
+  const refinementLimits = deps.refinementLimits ?? DEFAULT_REFINEMENT_LIMITS;
   const keepRecentMessages = deps.keepRecentMessages ?? DEFAULT_KEEP_RECENT_MESSAGES;
   const analyticsLogger = deps.analyticsLogger ?? { info: () => {} };
   const logger = deps.logger ?? silentLogger();
@@ -429,6 +463,12 @@ export function createAgentOrchestrator(deps: AgentOrchestratorDeps) {
       sessionId,
       onEvent: (event) => events.push(event),
     });
+    const marketingRefinementTool = createMarketingRefinementTool({
+      store: sessionStore,
+      sessionId,
+      renderMarketingPlans: marketingPlansTool.render_marketing_plans,
+      limits: refinementLimits,
+    });
     const toolRegistry: ToolRegistry = {
       get_manifest: manifestTools.get_manifest,
       update_manifest: manifestTools.update_manifest,
@@ -444,6 +484,7 @@ export function createAgentOrchestrator(deps: AgentOrchestratorDeps) {
       lock_cost_table: costTableTool.lock_cost_table,
       render_marketing_plans: marketingPlansTool.render_marketing_plans,
       select_marketing_plan: marketingPlansTool.select_marketing_plan,
+      refine_marketing_plans: marketingRefinementTool.refine_marketing_plans,
       ...deps.extraTools,
     };
     const dispatcher = createToolDispatcher({ tools: toolRegistry, logger });
