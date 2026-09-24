@@ -96,6 +96,12 @@ import {
   createInMemoryProcessedEventStore,
   type StripeEventHandler,
 } from './stripe-event-processor.js';
+import {
+  createEntitlementsService,
+  createInMemoryEntitlementStore,
+  type EntitlementStore,
+} from './entitlements.js';
+import { createEntitlementWebhookHandlers } from './entitlement-webhook-handlers.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -107,6 +113,7 @@ declare module 'fastify' {
     costGuard: ReturnType<typeof createCostGuard>;
     webSearchTool: ReturnType<typeof createWebSearchTool>;
     pricingCatalog: ReturnType<typeof createPricingCatalog>;
+    entitlements: ReturnType<typeof createEntitlementsService>;
   }
 }
 
@@ -149,8 +156,10 @@ export interface BuildAppDeps {
   stripeClient?: StripeClient;
   /** Stripe webhook signature verifier (Epic 6.2). Defaults to a real SDK-backed verifier keyed by env; only registered when STRIPE_WEBHOOK_SECRET is set. */
   stripeWebhookVerifier?: StripeWebhookVerifier;
-  /** Per-Stripe-event-type handlers the webhook processor dispatches to (Epic 6.3). Defaults to none registered — the entitlements service (#100) is what will populate this once it exists. */
+  /** Per-Stripe-event-type handlers the webhook processor dispatches to (Epic 6.3). Defaults to the real entitlement-granting handlers (entitlement-webhook-handlers.ts) wired against `entitlementStore` below. */
   stripeEventHandlers?: Record<string, StripeEventHandler>;
+  /** Entitlement audit ledger (Epic 6.4). Defaults to in-memory; swap for DB-backed once durability across restarts is needed. */
+  entitlementStore?: EntitlementStore;
 }
 
 /**
@@ -445,20 +454,26 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
   const checkoutTool = createCheckoutSessionTool({ client: stripeClient, catalog: tierCatalog });
   registerCheckoutRoutes(app, authStore, checkoutTool);
 
+  // Entitlements service (Epic 6.4): the single source of truth every gate
+  // queries — "does this user own this tier." Built unconditionally (not
+  // gated behind a real Stripe key) since admin overrides and future gate
+  // checks need it regardless of whether real purchases are flowing yet.
+  const entitlementStore = deps.entitlementStore ?? createInMemoryEntitlementStore();
+  const entitlements = createEntitlementsService({ store: entitlementStore });
+  app.decorate('entitlements', entitlements);
+
   // Stripe webhooks (Epic 6.2): only registered when a real verifier +
   // secret are available — unlike checkout, there's no meaningful
   // "unconfigured" webhook behavior to fall back to (a webhook endpoint
   // that always rejects isn't useful, and Stripe won't be sending events
   // for a service with no real STRIPE_WEBHOOK_SECRET anyway).
   if (deps.stripeWebhookVerifier && env.STRIPE_WEBHOOK_SECRET) {
-    // Idempotent dispatch (Epic 6.3, #99): dedup by event id, then hand off
-    // to a per-type handler. No handlers are registered yet — granting
-    // entitlements on a verified event is the entitlements service's job
-    // (#100, not yet built); until then every event is a harmless verified
-    // no-op rather than a fabricated grant.
+    // Idempotent dispatch (Epic 6.3, #99) into the real entitlement-
+    // granting handlers (Epic 6.4, #100) — checkout.session.completed
+    // grants, charge.refunded/customer.subscription.deleted revoke.
     const stripeEventProcessor = createStripeEventProcessor({
       store: createInMemoryProcessedEventStore(),
-      handlers: deps.stripeEventHandlers ?? {},
+      handlers: deps.stripeEventHandlers ?? createEntitlementWebhookHandlers({ entitlements }),
       alertOnFailure: (alert) =>
         app.log.error(
           { eventId: alert.eventId, eventType: alert.eventType, details: alert.details },

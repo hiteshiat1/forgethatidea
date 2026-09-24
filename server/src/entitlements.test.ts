@@ -1,0 +1,123 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { createEntitlementsService, createInMemoryEntitlementStore } from './entitlements.js';
+
+describe('entitlements service (#100)', () => {
+  it('reports no entitlements for a user who has never purchased anything', async () => {
+    const store = createInMemoryEntitlementStore();
+    const service = createEntitlementsService({ store });
+
+    const owns = await service.hasEntitlement('user-1', 'spec-pack');
+
+    expect(owns).toBe(false);
+  });
+
+  it('grants an entitlement and reports it owned afterward', async () => {
+    const store = createInMemoryEntitlementStore();
+    const service = createEntitlementsService({ store });
+
+    await service.grant('user-1', 'spec-pack', { source: 'purchase', reference: 'cs_test_1' });
+
+    expect(await service.hasEntitlement('user-1', 'spec-pack')).toBe(true);
+    // Scoped per user — someone else's account is unaffected.
+    expect(await service.hasEntitlement('user-2', 'spec-pack')).toBe(false);
+    // Scoped per tier — granting one tier doesn't grant another.
+    expect(await service.hasEntitlement('user-1', 'pitch-deck')).toBe(false);
+  });
+
+  it('revokes a previously granted entitlement', async () => {
+    const store = createInMemoryEntitlementStore();
+    const service = createEntitlementsService({ store });
+
+    await service.grant('user-1', 'spec-pack', { source: 'purchase', reference: 'cs_test_1' });
+    await service.revoke('user-1', 'spec-pack', { source: 'refund', reference: 're_test_1' });
+
+    expect(await service.hasEntitlement('user-1', 'spec-pack')).toBe(false);
+  });
+
+  it('lists every tier a user owns', async () => {
+    const store = createInMemoryEntitlementStore();
+    const service = createEntitlementsService({ store });
+
+    await service.grant('user-1', 'spec-pack', { source: 'purchase', reference: 'cs_1' });
+    await service.grant('user-1', 'pitch-deck', { source: 'purchase', reference: 'cs_2' });
+
+    const owned = await service.listEntitlements('user-1');
+
+    expect(owned.sort()).toEqual(['pitch-deck', 'spec-pack']);
+  });
+
+  it('supports an admin override grant, distinguishable in the audit trail from a real purchase', async () => {
+    const store = createInMemoryEntitlementStore();
+    const service = createEntitlementsService({ store });
+
+    await service.grant('user-1', 'financial-pack', {
+      source: 'admin_override',
+      reference: 'support-ticket-42',
+    });
+
+    expect(await service.hasEntitlement('user-1', 'financial-pack')).toBe(true);
+    const records = await store.listByUser('user-1');
+    expect(records).toContainEqual(
+      expect.objectContaining({
+        tierId: 'financial-pack',
+        source: 'admin_override',
+        reference: 'support-ticket-42',
+      }),
+    );
+  });
+
+  it('serves lookups from an in-memory cache rather than hitting the store on every call', async () => {
+    const store = createInMemoryEntitlementStore();
+    const listByUserSpy = vi.spyOn(store, 'listByUser');
+    const service = createEntitlementsService({ store });
+
+    await service.grant('user-1', 'spec-pack', { source: 'purchase', reference: 'cs_1' });
+    listByUserSpy.mockClear();
+
+    await service.hasEntitlement('user-1', 'spec-pack');
+    await service.hasEntitlement('user-1', 'spec-pack');
+    await service.hasEntitlement('user-1', 'pitch-deck');
+
+    // The cache was populated by the grant call above; repeated lookups for
+    // the same user should not each re-read the store.
+    expect(listByUserSpy).not.toHaveBeenCalled();
+  });
+
+  it('invalidates the cache immediately on grant so a fresh purchase is reflected right away', async () => {
+    const store = createInMemoryEntitlementStore();
+    const service = createEntitlementsService({ store });
+
+    expect(await service.hasEntitlement('user-1', 'spec-pack')).toBe(false);
+    await service.grant('user-1', 'spec-pack', { source: 'purchase', reference: 'cs_1' });
+    expect(await service.hasEntitlement('user-1', 'spec-pack')).toBe(true);
+  });
+
+  it('invalidates the cache immediately on revoke', async () => {
+    const store = createInMemoryEntitlementStore();
+    const service = createEntitlementsService({ store });
+
+    await service.grant('user-1', 'spec-pack', { source: 'purchase', reference: 'cs_1' });
+    expect(await service.hasEntitlement('user-1', 'spec-pack')).toBe(true);
+
+    await service.revoke('user-1', 'spec-pack', { source: 'refund', reference: 're_1' });
+    expect(await service.hasEntitlement('user-1', 'spec-pack')).toBe(false);
+  });
+});
+
+describe('createInMemoryEntitlementStore (#100)', () => {
+  beforeEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('records grant and revoke as separate audit entries rather than overwriting', async () => {
+    const store = createInMemoryEntitlementStore();
+
+    await store.grant('user-1', 'spec-pack', { source: 'purchase', reference: 'cs_1' });
+    await store.revoke('user-1', 'spec-pack', { source: 'refund', reference: 're_1' });
+
+    const records = await store.listByUser('user-1');
+    expect(records).toHaveLength(2);
+    expect(records[0]).toMatchObject({ tierId: 'spec-pack', action: 'grant' });
+    expect(records[1]).toMatchObject({ tierId: 'spec-pack', action: 'revoke' });
+  });
+});
