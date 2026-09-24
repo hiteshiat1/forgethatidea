@@ -1,0 +1,145 @@
+/* Marketing landing page ('/'), the front door before AuthGate. */
+
+.landing-page {
+  min-height: 100vh;
+  background: var(--forge-ink-900);
+  color: var(--forge-slate-100);
+  display: flex;
+  flex-direction: column;
+}
+
+.landing-page__topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--forge-space-4) var(--forge-space-6);
+}
+
+.landing-page__hero {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--forge-space-4);
+  max-width: 720px;
+  padding: var(--forge-space-12) var(--forge-space-6) var(--forge-space-8);
+  margin: 0 auto;
+  width: 100%;
+  text-align: left;
+}
+
+.landing-page__headline {
+  margin: var(--forge-space-2) 0 0;
+  font-size: var(--forge-font-size-3xl, 3rem);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--forge-slate-100);
+}
+
+.landing-page__subhead {
+  margin: 0;
+  font-size: var(--forge-font-size-lg, 1.125rem);
+  color: var(--forge-slate-300);
+  max-width: 56ch;
+}
+
+.landing-page__cta-row {
+  display: flex;
+  align-items: center;
+  gap: var(--forge-space-4);
+  margin-top: var(--forge-space-2);
+}
+
+.landing-page__cta-hint {
+  font-size: 0.875rem;
+  color: var(--forge-slate-400);
+}
+
+.landing-page__section {
+  padding: var(--forge-space-8) var(--forge-space-6);
+  max-width: 960px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.landing-page__section-title {
+  margin: 0 0 var(--forge-space-6);
+  font-size: var(--forge-font-size-xl, 1.5rem);
+  font-weight: 700;
+  text-align: center;
+}
+
+.landing-page__steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--forge-space-6);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.landing-page__step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--forge-space-1);
+}
+
+.landing-page__step-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--forge-radius-pill);
+  background: var(--forge-gradient-signal);
+  color: var(--forge-ink-900);
+  font-weight: 700;
+  font-size: 0.875rem;
+  margin-bottom: var(--forge-space-1);
+}
+
+.landing-page__step-label {
+  font-weight: 600;
+  color: var(--forge-slate-100);
+}
+
+.landing-page__step-detail {
+  font-size: 0.9rem;
+  color: var(--forge-slate-300);
+}
+
+.landing-page__value-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--forge-space-6);
+}
+
+.landing-page__value-card {
+  background: var(--forge-ink-700);
+  border: 1px solid var(--forge-ink-500);
+  border-radius: var(--forge-radius-lg);
+  padding: var(--forge-space-4);
+}
+
+.landing-page__value-title {
+  margin: 0 0 var(--forge-space-2);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--forge-slate-100);
+}
+
+.landing-page__value-body {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--forge-slate-300);
+  line-height: 1.5;
+}
+
+.landing-page__final-cta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--forge-space-4);
+  text-align: center;
+  padding-bottom: var(--forge-space-12);
+}
