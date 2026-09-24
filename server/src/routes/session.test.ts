@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import { registerAuthRoutes } from './auth.js';
-import { registerSessionRoutes } from './session.js';
+import { registerSessionRoutes, isCardTamperAttempt } from './session.js';
 import { createInMemoryAuthStore } from '../auth/auth-store.js';
 import { createInMemorySessionStore } from '../session-store.js';
 
@@ -33,6 +33,25 @@ async function signUpAndGetCookie(app: Awaited<ReturnType<typeof buildTestApp>>[
   });
   return extractCookie(res);
 }
+
+describe('isCardTamperAttempt (#92)', () => {
+  it('flags a request body that includes a cards field', () => {
+    expect(isCardTamperAttempt({ phase: 'build', cards: [{ id: 'fake' }] })).toBe(true);
+    expect(isCardTamperAttempt({ cards: [] })).toBe(true);
+  });
+
+  it('does not flag a legitimate body with no cards field', () => {
+    expect(isCardTamperAttempt({ phase: 'build' })).toBe(false);
+    expect(isCardTamperAttempt({ chat: [{ role: 'user', text: 'hi' }] })).toBe(false);
+    expect(isCardTamperAttempt({})).toBe(false);
+  });
+
+  it('handles non-object bodies safely', () => {
+    expect(isCardTamperAttempt(null)).toBe(false);
+    expect(isCardTamperAttempt(undefined)).toBe(false);
+    expect(isCardTamperAttempt('cards')).toBe(false);
+  });
+});
 
 describe('POST /api/sessions', () => {
   it('rejects an anonymous request', async () => {
@@ -251,7 +270,7 @@ describe('GET /api/sessions (project list)', () => {
 
 describe('GET /api/sessions/:id', () => {
   it('restores phase, chat, and cards for the owning user', async () => {
-    const { app } = await buildTestApp();
+    const { app, sessionStore } = await buildTestApp();
     const authCookie = await signUpAndGetCookie(app);
 
     const created = await app.inject({
@@ -265,7 +284,13 @@ describe('GET /api/sessions/:id', () => {
       method: 'PATCH',
       url: `/api/sessions/${sessionId}`,
       headers: { cookie: authCookie },
-      payload: { phase: 'sources', chat: [{ role: 'user', text: 'hi' }], cards: [{ id: 'c1' }] },
+      payload: { phase: 'sources', chat: [{ role: 'user', text: 'hi' }] },
+    });
+    // Cards are never client-writable via this route (#92) — seed directly
+    // via the store, matching how a real render_* tool would have written
+    // them, to confirm GET genuinely restores server-persisted cards.
+    await sessionStore.update(sessionId, {
+      cards: [{ id: 'c1', type: 'options', status: 'draft' }],
     });
 
     const res = await app.inject({
@@ -278,7 +303,7 @@ describe('GET /api/sessions/:id', () => {
     expect(res.json()).toMatchObject({
       phase: 'sources',
       chat: [{ role: 'user', text: 'hi' }],
-      cards: [{ id: 'c1' }],
+      cards: [{ id: 'c1', type: 'options', status: 'draft' }],
     });
     await app.close();
   });
@@ -476,8 +501,8 @@ describe('PATCH /api/sessions/:id', () => {
     await app.close();
   });
 
-  it('allows entering build once all four required cards are locked', async () => {
-    const { app } = await buildTestApp();
+  it('allows entering build once all four required cards are genuinely locked server-side', async () => {
+    const { app, sessionStore } = await buildTestApp();
     const authCookie = await signUpAndGetCookie(app);
 
     const created = await app.inject({
@@ -486,12 +511,6 @@ describe('PATCH /api/sessions/:id', () => {
       headers: { cookie: authCookie },
     });
     const sessionId = created.json().id;
-
-    const lockedCards = ['options', 'architecture', 'cost', 'marketing'].map((type) => ({
-      id: `${type}-1`,
-      type,
-      status: 'locked',
-    }));
 
     for (const phase of ['sources', 'brainstorm', 'planning']) {
       await app.inject({
@@ -502,15 +521,75 @@ describe('PATCH /api/sessions/:id', () => {
       });
     }
 
+    // Simulates what the real render_* tools persist once the user locks
+    // each card (e.g. lock_architecture, select_marketing_plan) — writing
+    // directly to the store rather than through the client-facing PATCH,
+    // since #92 requires the gate to trust only genuinely server-persisted
+    // card state, never a client-supplied `cards` payload.
+    const lockedCards = ['options', 'architecture', 'cost', 'marketing'].map((type) => ({
+      id: `${type}-1`,
+      type,
+      status: 'locked',
+    }));
+    await sessionStore.update(sessionId, { cards: lockedCards });
+
     const res = await app.inject({
       method: 'PATCH',
       url: `/api/sessions/${sessionId}`,
       headers: { cookie: authCookie },
-      payload: { phase: 'build', cards: lockedCards },
+      payload: { phase: 'build' },
     });
 
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ phase: 'build' });
+    await app.close();
+  });
+
+  it("never trusts client-supplied cards to satisfy the build gate — only the session's own real cards count (#92)", async () => {
+    // Regression coverage for a real tamper vector: a client could PATCH
+    // { phase: 'build', cards: [...fabricated locked cards...] } in one
+    // request and pass the gate without ever actually locking anything
+    // server-side (no card was ever created via render_build_options,
+    // lock_architecture, etc.) — the gate check must only ever evaluate the
+    // session's own persisted cards, never a value the client just sent.
+    const { app } = await buildTestApp();
+    const authCookie = await signUpAndGetCookie(app);
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: authCookie },
+    });
+    const sessionId = created.json().id;
+
+    for (const phase of ['sources', 'brainstorm', 'planning']) {
+      await app.inject({
+        method: 'PATCH',
+        url: `/api/sessions/${sessionId}`,
+        headers: { cookie: authCookie },
+        payload: { phase },
+      });
+    }
+
+    const fabricatedLockedCards = ['options', 'architecture', 'cost', 'marketing'].map((type) => ({
+      id: `fake-${type}`,
+      type,
+      status: 'locked',
+    }));
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/sessions/${sessionId}`,
+      headers: { cookie: authCookie },
+      payload: { phase: 'build', cards: fabricatedLockedCards },
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toMatchObject({
+      error: 'phase_gate_not_satisfied',
+      to: 'build',
+      missing: expect.arrayContaining(['options', 'architecture', 'cost', 'marketing']),
+    });
     await app.close();
   });
 });
@@ -552,7 +631,7 @@ describe('GET /api/sessions/:id/gate', () => {
   });
 
   it('reports the gate as passed once cards are locked, without mutating the session', async () => {
-    const { app } = await buildTestApp();
+    const { app, sessionStore } = await buildTestApp();
     const authCookie = await signUpAndGetCookie(app);
 
     const created = await app.inject({
@@ -576,12 +655,9 @@ describe('GET /api/sessions/:id/gate', () => {
         payload: { phase },
       });
     }
-    await app.inject({
-      method: 'PATCH',
-      url: `/api/sessions/${sessionId}`,
-      headers: { cookie: authCookie },
-      payload: { cards: lockedCards },
-    });
+    // Seeded directly (#92: cards are never client-writable via PATCH),
+    // matching what a real render_* tool would have persisted.
+    await sessionStore.update(sessionId, { cards: lockedCards });
 
     const res = await app.inject({
       method: 'GET',
@@ -601,7 +677,7 @@ describe('GET /api/sessions/:id/gate', () => {
   });
 
   it('reports passed with no next phase for the terminal phase', async () => {
-    const { app } = await buildTestApp();
+    const { app, sessionStore } = await buildTestApp();
     const authCookie = await signUpAndGetCookie(app);
 
     const created = await app.inject({
@@ -624,11 +700,13 @@ describe('GET /api/sessions/:id/gate', () => {
         payload: { phase },
       });
     }
+    // Seeded directly (#92: cards are never client-writable via PATCH).
+    await sessionStore.update(sessionId, { cards: lockedCards });
     await app.inject({
       method: 'PATCH',
       url: `/api/sessions/${sessionId}`,
       headers: { cookie: authCookie },
-      payload: { phase: 'build', cards: lockedCards },
+      payload: { phase: 'build' },
     });
     await app.inject({
       method: 'PATCH',
