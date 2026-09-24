@@ -63,6 +63,13 @@ const envSchema = z.object({
   PRICE_SPEC_PACK_CENTS: z.coerce.number().int().positive().default(1900), // $19.00
   PRICE_PITCH_DECK_CENTS: z.coerce.number().int().positive().default(2900), // $29.00
   PRICE_FINANCIAL_PACK_CENTS: z.coerce.number().int().positive().default(4900), // $49.00
+
+  // Stripe (Epic 6.2). Optional everywhere for now, same boot-without-a-key
+  // convention as TAVILY_API_KEY above — without a key the checkout tool
+  // falls back to an "unconfigured" client that errors clearly on use
+  // rather than the server failing to boot.
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

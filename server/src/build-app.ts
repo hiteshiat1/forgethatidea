@@ -82,6 +82,15 @@ import {
   createPersistingAnalyticsLogger,
   type AnalyticsStore,
 } from './analytics-store.js';
+import { getTierCatalog } from './tier-catalog.js';
+import {
+  createCheckoutSessionTool,
+  createUnconfiguredStripeClient,
+  type StripeClient,
+} from './stripe-checkout.js';
+import { registerCheckoutRoutes } from './routes/checkout.js';
+import { registerStripeWebhookRoutes } from './routes/stripe-webhook-route.js';
+import type { StripeWebhookVerifier } from './stripe-webhook.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -131,6 +140,10 @@ export interface BuildAppDeps {
   artifactStore?: ArtifactStore;
   /** Durable analytics event log (Epic 5.11). Defaults to DB-backed when `db` is available, else in-memory. */
   analyticsStore?: AnalyticsStore;
+  /** Stripe checkout client (Epic 6.2). Defaults to a real SDK-backed client keyed by env, or an unconfigured stub. */
+  stripeClient?: StripeClient;
+  /** Stripe webhook signature verifier (Epic 6.2). Defaults to a real SDK-backed verifier keyed by env; only registered when STRIPE_WEBHOOK_SECRET is set. */
+  stripeWebhookVerifier?: StripeWebhookVerifier;
 }
 
 /**
@@ -411,6 +424,28 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
   // Version list + revert (Epic 5.6): same no-model-call reasoning as
   // export/app-artifact above — registered unconditionally.
   registerAppVersionsRoutes(app, authStore, sessionStore, artifactStore);
+
+  // Checkout (Epic 6.2): registered unconditionally — without a real
+  // STRIPE_SECRET_KEY, deps.stripeClient defaults to the unconfigured stub
+  // (stripe-checkout.ts), so the route exists and returns a clear
+  // checkout_session_failed rather than 404ing, same convention as the
+  // web-search tool falling back to an unconfigured client above. No real
+  // SDK-backed StripeClient exists yet — building one needs a live
+  // test-mode key to verify checkout.sessions.create calls actually work
+  // end to end (see this PR's description).
+  const stripeClient = deps.stripeClient ?? createUnconfiguredStripeClient();
+  const tierCatalog = getTierCatalog(env);
+  const checkoutTool = createCheckoutSessionTool({ client: stripeClient, catalog: tierCatalog });
+  registerCheckoutRoutes(app, authStore, checkoutTool);
+
+  // Stripe webhooks (Epic 6.2): only registered when a real verifier +
+  // secret are available — unlike checkout, there's no meaningful
+  // "unconfigured" webhook behavior to fall back to (a webhook endpoint
+  // that always rejects isn't useful, and Stripe won't be sending events
+  // for a service with no real STRIPE_WEBHOOK_SECRET anyway).
+  if (deps.stripeWebhookVerifier && env.STRIPE_WEBHOOK_SECRET) {
+    registerStripeWebhookRoutes(app, deps.stripeWebhookVerifier, env.STRIPE_WEBHOOK_SECRET);
+  }
 
   return app;
 }
