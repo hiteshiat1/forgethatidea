@@ -1,5 +1,5 @@
 import { type CSSProperties, type ReactNode } from 'react';
-import { color } from '@forge/shared';
+import { color, PHASE_COLORS } from '@forge/shared';
 import { Card, Pill, type PillTone } from '@forge/shared/ui';
 import '../styles/canvas-pane.css';
 
@@ -23,14 +23,19 @@ const STATUS_TONE: Record<CardStatus, PillTone> = {
  * Fixed accent palette deliverable cards pick from (Epic 1.9) — e.g. build
  * options in amber, cost/planning cards in slate, etc. Kept as a small fixed
  * set (rather than free-form color) so the canvas stays visually coherent as
- * new card types are added by later epics.
+ * new card types are added by later epics. `'planning'` ties every planning
+ * card (build options, architecture, cost, marketing) to the same color as
+ * the planning step in PhaseRail (PHASE_COLORS), so the phase's color shows
+ * up both in the flow indicator and at the point of use
+ * (docs/landing-page-and-ui.md) rather than the two drifting independently.
  */
-export type CardAccent = 'signal' | 'success' | 'neutral';
+export type CardAccent = 'signal' | 'success' | 'neutral' | 'planning';
 
 const ACCENT_COLOR: Record<CardAccent, string> = {
   signal: color.signal.amber,
   success: color.success,
   neutral: color.slate[400],
+  planning: PHASE_COLORS.planning,
 };
 
 export interface CanvasCardProps {

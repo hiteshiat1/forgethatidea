@@ -47,30 +47,40 @@
   line-height: 1;
 }
 
-/* ---- Upcoming: muted, low emphasis ---- */
+/* Each step carries its own phase color via the --phase-color custom
+   property (set inline per PHASE_COLORS — see PhaseRail.tsx), so the whole
+   journey is visible in color from the start (docs/landing-page-and-ui.md).
+   Upcoming stays dimmed (quiet — nothing to look at yet); done and active
+   both show the phase's real color, done at reduced opacity so the active
+   step still reads as "now". */
+
+/* ---- Upcoming: the phase color, dimmed ---- */
 .phase-rail__step--upcoming {
-  color: var(--forge-slate-400);
+  color: var(--phase-color);
+  opacity: 0.35;
 }
 .phase-rail__step--upcoming .phase-rail__marker {
   background: var(--forge-ink-600);
-  color: var(--forge-slate-400);
+  color: var(--phase-color);
 }
 
-/* ---- Done: distinct, settled ---- */
+/* ---- Done: the phase color, settled ---- */
 .phase-rail__step--done {
-  color: var(--forge-slate-300);
+  color: var(--phase-color);
+  opacity: 0.75;
 }
 .phase-rail__step--done .phase-rail__marker {
-  background: rgba(62, 207, 142, 0.15);
-  color: var(--forge-success);
+  background: color-mix(in srgb, var(--phase-color) 20%, transparent);
+  color: var(--phase-color);
 }
 
-/* ---- Active: the heat ---- */
+/* ---- Active: the phase color, full heat ---- */
 .phase-rail__step--active {
-  color: var(--forge-signal-amber);
+  color: var(--phase-color);
+  opacity: 1;
 }
 .phase-rail__step--active .phase-rail__marker {
-  background: var(--forge-signal-amber);
+  background: var(--phase-color);
   color: var(--forge-ink-900);
   font-weight: 600;
 }

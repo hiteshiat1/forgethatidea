@@ -29,7 +29,7 @@ export function ArchitectureCard({
   const locked = status === 'locked' || status === 'live';
 
   return (
-    <CanvasCard title="Architecture" index={index} status={status} accent="signal">
+    <CanvasCard title="Architecture" index={index} status={status} accent="planning">
       <p className="architecture-card__summary">{content.summary}</p>
 
       <div className="architecture-card__boxes">

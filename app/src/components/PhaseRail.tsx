@@ -1,4 +1,5 @@
-import { PHASES, PHASE_LABELS, type Phase } from '@forge/shared';
+import type { CSSProperties } from 'react';
+import { PHASES, PHASE_LABELS, PHASE_COLORS, type Phase } from '@forge/shared';
 import '../styles/phase-rail.css';
 
 export interface PhaseRailProps {
@@ -27,6 +28,7 @@ export function PhaseRail({ current }: PhaseRailProps) {
           <li
             key={phase}
             className={`phase-rail__step phase-rail__step--${state}`}
+            style={{ '--phase-color': PHASE_COLORS[phase] } as CSSProperties}
             aria-current={state === 'active' ? 'step' : undefined}
             ref={
               state === 'active'

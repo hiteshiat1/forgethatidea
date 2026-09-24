@@ -36,7 +36,7 @@ export function BuildOptionsCard({
   }
 
   return (
-    <CanvasCard title="Build options" index={index} status={status} accent="signal">
+    <CanvasCard title="Build options" index={index} status={status} accent="planning">
       <div className="build-options-card__grid">
         {content.options.map((option, i) => {
           const isSelected = content.selectedIndex === i;
