@@ -176,6 +176,19 @@
   margin-top: var(--forge-space-6);
 }
 
+/* With exactly 4 value props, 3 columns leaves a lone 4th card
+   left-aligned on its own row — center it under the middle column
+   instead of letting the grid's default placement strand it on the left. */
+@media (min-width: 720px) {
+  .landing-page__value-grid {
+    grid-template-columns: repeat(3, minmax(220px, 1fr));
+  }
+
+  .landing-page__value-card:last-child:nth-child(4) {
+    grid-column: 2;
+  }
+}
+
 .landing-page__value-card {
   background: var(--forge-ink-700);
   border: 1px solid var(--forge-ink-500);
