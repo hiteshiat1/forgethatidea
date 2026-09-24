@@ -1,0 +1,130 @@
+import { isTierId, type TierId, type TierProduct } from './tier-catalog.js';
+
+export interface StripeCheckoutSession {
+  id: string;
+  url: string;
+}
+
+export interface CreateOneOffCheckoutSessionInput {
+  tierId: TierId;
+  priceCents: number;
+  userId: string;
+  successUrl: string;
+  cancelUrl: string;
+}
+
+export interface CreateSubscriptionCheckoutSessionInput {
+  tierId: TierId;
+  priceCents: number;
+  userId: string;
+  successUrl: string;
+  cancelUrl: string;
+}
+
+/**
+ * Thin wrapper over the real Stripe SDK (Epic 6.2) — swappable so every call
+ * site here is unit-testable against a fake, same shape as
+ * anthropic-client.ts/web-search.ts's client abstractions. The real
+ * implementation (createStripeClient, not yet built — needs a live
+ * STRIPE_SECRET_KEY to verify end-to-end, see PR description) wraps the
+ * `stripe` npm package's `checkout.sessions.create` calls.
+ */
+export interface StripeClient {
+  createOneOffCheckoutSession(
+    input: CreateOneOffCheckoutSessionInput,
+  ): Promise<StripeCheckoutSession>;
+  createSubscriptionCheckoutSession(
+    input: CreateSubscriptionCheckoutSessionInput,
+  ): Promise<StripeCheckoutSession>;
+}
+
+/**
+ * Fallback used when no STRIPE_SECRET_KEY is configured (build-app.ts) — errors
+ * clearly on use rather than the server failing to boot, same convention as
+ * web-search.ts's createUnconfiguredWebSearchClient. The real SDK-backed
+ * client isn't built yet: it needs a live test-mode key to verify
+ * checkout.sessions.create calls actually work end to end (see PR
+ * description) and is deliberately left for whoever adds that key.
+ */
+export function createUnconfiguredStripeClient(): StripeClient {
+  const reject = () =>
+    Promise.reject(new Error('Stripe is not configured (missing STRIPE_SECRET_KEY)'));
+  return {
+    createOneOffCheckoutSession: reject,
+    createSubscriptionCheckoutSession: reject,
+  };
+}
+
+export interface CreateCheckoutSessionToolDeps {
+  client: StripeClient;
+  catalog: TierProduct[];
+}
+
+export interface CreateCheckoutSessionInput {
+  tierId: string;
+  userId: string;
+  successUrl: string;
+  cancelUrl: string;
+}
+
+export type CheckoutSessionResult =
+  | { ok: true; sessionId: string; url: string }
+  | { ok: false; error: 'unknown_tier' }
+  | { ok: false; error: 'checkout_session_failed'; details: string };
+
+/**
+ * Explicit type guard rather than relying on inline `!result.ok` narrowing —
+ * this pattern has caused a Vercel-only build failure multiple times this
+ * project even when local tsc is clean on the same TypeScript version.
+ */
+export function isCheckoutSessionFailure(
+  result: CheckoutSessionResult,
+): result is Extract<CheckoutSessionResult, { ok: false }> {
+  return result.ok === false;
+}
+
+/**
+ * Checkout-session creation (Epic 6.2): routes each tier to the right Stripe
+ * flow — the app-refinement top-up is the only subscription-billed tier
+ * (tier-catalog.ts), everything else is a one-off purchase. Never trusts a
+ * client-supplied price; always looks the tier's price up from the shared
+ * catalog (#97) so a request can't smuggle in an arbitrary amount.
+ */
+export function createCheckoutSessionTool(deps: CreateCheckoutSessionToolDeps) {
+  const { client, catalog } = deps;
+
+  async function createCheckoutSession(
+    input: CreateCheckoutSessionInput,
+  ): Promise<CheckoutSessionResult> {
+    if (!isTierId(input.tierId)) {
+      return { ok: false, error: 'unknown_tier' };
+    }
+
+    const product = catalog.find((p) => p.id === input.tierId);
+    if (!product) {
+      return { ok: false, error: 'unknown_tier' };
+    }
+
+    const sessionInput = {
+      tierId: product.id,
+      priceCents: product.priceCents,
+      userId: input.userId,
+      successUrl: input.successUrl,
+      cancelUrl: input.cancelUrl,
+    };
+
+    try {
+      const session =
+        product.billingModel === 'subscription'
+          ? await client.createSubscriptionCheckoutSession(sessionInput)
+          : await client.createOneOffCheckoutSession(sessionInput);
+
+      return { ok: true, sessionId: session.id, url: session.url };
+    } catch (err) {
+      const details = err instanceof Error ? err.message : String(err);
+      return { ok: false, error: 'checkout_session_failed', details };
+    }
+  }
+
+  return { createCheckoutSession };
+}

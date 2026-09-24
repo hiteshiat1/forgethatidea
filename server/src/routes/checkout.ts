@@ -1,0 +1,55 @@
+import { type FastifyInstance } from 'fastify';
+import { z } from 'zod';
+import { requireAuth } from './auth.js';
+import { type AuthStore } from '../auth/auth-store.js';
+import {
+  isCheckoutSessionFailure,
+  type CheckoutSessionResult,
+  type createCheckoutSessionTool,
+} from '../stripe-checkout.js';
+
+const checkoutSchema = z.object({
+  tierId: z.string().trim().min(1),
+  successUrl: z.string().url(),
+  cancelUrl: z.string().url(),
+});
+
+const ERROR_STATUS: Record<Extract<CheckoutSessionResult, { ok: false }>['error'], number> = {
+  unknown_tier: 400,
+  checkout_session_failed: 502,
+};
+
+/**
+ * Checkout route (Epic 6.2): creates a Stripe checkout session (one-off or
+ * subscription, routed by tier — see stripe-checkout.ts) for the
+ * authenticated user. Never trusts a client-supplied price; the tool this
+ * delegates to always looks the amount up from the shared tier catalog
+ * (#97).
+ */
+export function registerCheckoutRoutes(
+  app: FastifyInstance,
+  authStore: AuthStore,
+  checkoutTool: ReturnType<typeof createCheckoutSessionTool>,
+) {
+  const auth = requireAuth(authStore);
+
+  app.post('/api/checkout', { preHandler: auth }, async (request, reply) => {
+    const parsed = checkoutSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'validation_failed' });
+    }
+
+    const result = await checkoutTool.createCheckoutSession({
+      tierId: parsed.data.tierId,
+      userId: request.userId!,
+      successUrl: parsed.data.successUrl,
+      cancelUrl: parsed.data.cancelUrl,
+    });
+
+    if (isCheckoutSessionFailure(result)) {
+      return reply.status(ERROR_STATUS[result.error]).send(result);
+    }
+
+    return reply.status(200).send(result);
+  });
+}
