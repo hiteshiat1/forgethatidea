@@ -91,6 +91,11 @@ import {
 import { registerCheckoutRoutes } from './routes/checkout.js';
 import { registerStripeWebhookRoutes } from './routes/stripe-webhook-route.js';
 import type { StripeWebhookVerifier } from './stripe-webhook.js';
+import {
+  createStripeEventProcessor,
+  createInMemoryProcessedEventStore,
+  type StripeEventHandler,
+} from './stripe-event-processor.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -144,6 +149,8 @@ export interface BuildAppDeps {
   stripeClient?: StripeClient;
   /** Stripe webhook signature verifier (Epic 6.2). Defaults to a real SDK-backed verifier keyed by env; only registered when STRIPE_WEBHOOK_SECRET is set. */
   stripeWebhookVerifier?: StripeWebhookVerifier;
+  /** Per-Stripe-event-type handlers the webhook processor dispatches to (Epic 6.3). Defaults to none registered — the entitlements service (#100) is what will populate this once it exists. */
+  stripeEventHandlers?: Record<string, StripeEventHandler>;
 }
 
 /**
@@ -444,7 +451,26 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
   // that always rejects isn't useful, and Stripe won't be sending events
   // for a service with no real STRIPE_WEBHOOK_SECRET anyway).
   if (deps.stripeWebhookVerifier && env.STRIPE_WEBHOOK_SECRET) {
-    registerStripeWebhookRoutes(app, deps.stripeWebhookVerifier, env.STRIPE_WEBHOOK_SECRET);
+    // Idempotent dispatch (Epic 6.3, #99): dedup by event id, then hand off
+    // to a per-type handler. No handlers are registered yet — granting
+    // entitlements on a verified event is the entitlements service's job
+    // (#100, not yet built); until then every event is a harmless verified
+    // no-op rather than a fabricated grant.
+    const stripeEventProcessor = createStripeEventProcessor({
+      store: createInMemoryProcessedEventStore(),
+      handlers: deps.stripeEventHandlers ?? {},
+      alertOnFailure: (alert) =>
+        app.log.error(
+          { eventId: alert.eventId, eventType: alert.eventType, details: alert.details },
+          'stripe webhook event failed to process',
+        ),
+    });
+    registerStripeWebhookRoutes(
+      app,
+      deps.stripeWebhookVerifier,
+      env.STRIPE_WEBHOOK_SECRET,
+      stripeEventProcessor,
+    );
   }
 
   return app;
