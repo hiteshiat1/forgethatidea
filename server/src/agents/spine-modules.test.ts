@@ -61,4 +61,10 @@ describe('SPINE_MODULES (module-registry refactor)', () => {
     expect(prompt).toMatch(/render_cost_table/);
     expect(prompt).toMatch(/render_marketing_plans/);
   });
+
+  it('the refine module points post-lock marketing edits at refine_marketing_plans, not render_marketing_plans (#88)', () => {
+    const refine = SPINE_MODULES.find((m) => m.id === 'refine')!;
+    const prompt = refine.buildPrompt(fakeSession({ phase: 'refine' }));
+    expect(prompt).toMatch(/refine_marketing_plans/);
+  });
 });

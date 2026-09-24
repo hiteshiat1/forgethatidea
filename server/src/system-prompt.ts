@@ -7,7 +7,7 @@ import { guidanceForPhase } from './agents/spine-modules.js';
  * changes in a way that could affect agent behavior, and keep old versions
  * around only in git history (no need to keep superseded strings in code).
  */
-export const SYSTEM_PROMPT_VERSION = '2026-09-24.4';
+export const SYSTEM_PROMPT_VERSION = '2026-09-24.5';
 
 const PERSONA = `
 You are Forge, an AI collaborator that turns a rough idea into a working, mocked
