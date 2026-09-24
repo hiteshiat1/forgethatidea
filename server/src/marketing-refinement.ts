@@ -80,7 +80,13 @@ export function createMarketingRefinementTool(deps: MarketingRefinementToolDeps)
 
     const renderResult = await renderMarketingPlans(rawInput);
     if (!renderResult.ok) {
-      return renderResult;
+      // Explicit reconstruction rather than `return renderResult` — its type
+      // (RenderMarketingPlansResult's failure variants) is structurally
+      // similar to but not identical to RefineMarketingPlansResult's, and
+      // returning it directly has caused a Vercel-only build failure here
+      // even though local tsc accepted it (see CLAUDE.md's documented
+      // narrowing-across-unions pattern).
+      return { ok: false, error: renderResult.error };
     }
 
     if (!isPostLockRefinement) {
