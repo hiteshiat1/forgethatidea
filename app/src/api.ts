@@ -477,3 +477,41 @@ export async function confirmBuild(sessionId: string): Promise<ConfirmBuildRespo
   }
   return { ok: true, session: body };
 }
+
+export type TierId = 'app-refinement-topup' | 'spec-pack' | 'pitch-deck' | 'financial-pack';
+
+export type CreateCheckoutSessionResponse =
+  | { ok: true; sessionId: string; url: string }
+  | { ok: false; error: string; details?: string };
+
+/**
+ * Starts a Stripe checkout session for the given tier (Epic 6.5's "gate/offer
+ * -> checkout"). `successUrl`/`cancelUrl` should both point back into the
+ * app so the whole purchase happens inside the funnel rather than handing
+ * the user off somewhere they have to navigate back from manually.
+ */
+export async function createCheckoutSession(
+  tierId: TierId,
+  successUrl: string,
+  cancelUrl: string,
+): Promise<CreateCheckoutSessionResponse> {
+  const res = await fetch('/api/checkout', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tierId, successUrl, cancelUrl }),
+  });
+  return res.json();
+}
+
+/**
+ * What the signed-in user currently owns (Epic 6.5's "unlock applies
+ * without refresh") — the checkout-return page re-fetches this rather than
+ * trusting any client-side "purchase succeeded" assumption, since the real
+ * grant only lands once Stripe's webhook (#99) reaches the entitlements
+ * service (#100).
+ */
+export async function getEntitlements(): Promise<{ owned: TierId[] }> {
+  const res = await fetch('/api/entitlements', { credentials: 'include' });
+  return res.json();
+}

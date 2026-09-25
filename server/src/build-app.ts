@@ -102,6 +102,7 @@ import {
   type EntitlementStore,
 } from './entitlements.js';
 import { createEntitlementWebhookHandlers } from './entitlement-webhook-handlers.js';
+import { registerEntitlementsRoutes } from './routes/entitlements.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -461,6 +462,11 @@ export function buildApp(env: Env = loadEnv(), deps: BuildAppDeps = {}): Fastify
   const entitlementStore = deps.entitlementStore ?? createInMemoryEntitlementStore();
   const entitlements = createEntitlementsService({ store: entitlementStore });
   app.decorate('entitlements', entitlements);
+
+  // Entitlements read route (Epic 6.5): lets the frontend re-check what the
+  // user owns after returning from checkout, without a full session
+  // refetch or page reload.
+  registerEntitlementsRoutes(app, authStore, entitlements);
 
   // Stripe webhooks (Epic 6.2): only registered when a real verifier +
   // secret are available — unlike checkout, there's no meaningful
