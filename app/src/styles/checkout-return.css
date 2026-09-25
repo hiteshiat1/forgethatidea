@@ -1,0 +1,25 @@
+/* Checkout return page (Epic 6.5) — a plain centered confirmation, not a full page shell, since the user lands here mid-flow rather than starting a session. */
+
+.checkout-return {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--forge-space-3);
+  min-height: 100vh;
+  padding: var(--forge-space-6);
+  text-align: center;
+  background: var(--forge-ink-900);
+  color: var(--forge-slate-100);
+}
+
+.checkout-return h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.checkout-return p {
+  margin: 0;
+  max-width: 32rem;
+  color: var(--forge-slate-300);
+}
